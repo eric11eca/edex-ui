@@ -1,6 +1,7 @@
 // eDEX-UI Renderer Entry Point (ES Module)
+// All Node.js/Electron access goes through window.edex (preload bridge)
 
-// CSS imports - replaces 20 <link> tags in ui.html
+// CSS imports
 import 'augmented-ui/augmented.css';
 import '../renderer/styles/main.css';
 import '../renderer/styles/modal.css';
@@ -23,7 +24,7 @@ import '../renderer/styles/mod_fuzzyFinder.css';
 import '../renderer/styles/mod_processlist.css';
 import '../renderer/styles/extra_ratios.css';
 
-// Component imports - replaces 14 <script> tags in ui.html
+// Component imports
 import { Modal } from './components/modal.class.js';
 import { Terminal } from './components/terminal.class.js';
 import { DocReader } from './components/docReader.class.js';
@@ -43,20 +44,7 @@ import { Toplist } from './components/toplist.class.js';
 import { FuzzyFinder } from './components/fuzzyFinder.class.js';
 import { AudioManager } from './components/audiofx.class.js';
 
-// Node/Electron imports
-import path from 'node:path';
-import fs from 'node:fs';
-import os from 'node:os';
-import electron from 'electron';
-
-// @electron/remote must use require() - it accesses Electron internals
-// that aren't available during Vite's module resolution
-const remote = require('@electron/remote');
-
-const ipc = electron.ipcRenderer;
-
-// Make classes available globally for inline onclick handlers and cross-class references
-// These will be removed in Phase 3 (centralized state)
+// Make classes available globally for inline onclick handlers
 window.Modal = Modal;
 window.Terminal = Terminal;
 window.DocReader = DocReader;
@@ -76,10 +64,6 @@ window.Toplist = Toplist;
 window.FuzzyFinder = FuzzyFinder;
 window.AudioManager = AudioManager;
 
-// Disable eval()
-window.eval = global.eval = function () {
-    throw new Error("eval() is disabled for security reasons.");
-};
 // Security helpers
 window._escapeHtml = text => {
     let map = {
@@ -102,7 +86,7 @@ window._purifyCSS = str => {
     return str.replace(/[<]/g, "");
 };
 window._delay = ms => {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         setTimeout(resolve, ms);
     });
 };
@@ -112,62 +96,52 @@ window.onerror = (msg, errPath, line, col, error) => {
     document.getElementById("boot_screen").innerHTML += `${error} :  ${msg}<br/>==> at ${errPath}  ${line}:${col}`;
 };
 
-const settingsDir = remote.app.getPath("userData");
-const themesDir = path.join(settingsDir, "themes");
-const keyboardsDir = path.join(settingsDir, "keyboards");
-const fontsDir = path.join(settingsDir, "fonts");
-const settingsFile = path.join(settingsDir, "settings.json");
-const shortcutsFile = path.join(settingsDir, "shortcuts.json");
-const lastWindowStateFile = path.join(settingsDir, "lastWindowState.json");
+// Cache directory paths from preload (synchronous)
+const settingsDir = window.edex.config.getSettingsDir();
+const fontsDir = window.edex.config.getFontsDir();
+const settingsFile = window.edex.path.join(settingsDir, "settings.json");
+const shortcutsFile = window.edex.path.join(settingsDir, "shortcuts.json");
+const lastWindowStateFile = window.edex.path.join(settingsDir, "lastWindowState.json");
 
-// Load config
-window.settings = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
-window.shortcuts = JSON.parse(fs.readFileSync(shortcutsFile, 'utf-8'));
-window.lastWindowState = JSON.parse(fs.readFileSync(lastWindowStateFile, 'utf-8'));
+// Load config via preload bridge (synchronous sendSync under the hood)
+window.settings = await window.edex.config.readSettings();
+window.shortcuts = await window.edex.config.readShortcuts();
+window.lastWindowState = await window.edex.config.readWindowState();
 
 // Load CLI parameters
-if (remote.process.argv.includes("--nointro")) {
-    window.settings.nointroOverride = true;
-} else {
-    window.settings.nointroOverride = false;
-}
-if (remote.process.argv.includes("--nocursor")) {
-    window.settings.nocursorOverride = true;
-} else {
-    window.settings.nocursorOverride = false;
-}
+const processArgv = window.edex.app.getProcessArgv();
+window.settings.nointroOverride = processArgv.includes("--nointro");
+window.settings.nocursorOverride = processArgv.includes("--nocursor");
 
 // Retrieve theme override (hotswitch)
-ipc.once("getThemeOverride", (e, theme) => {
-    if (theme !== null) {
-        window.settings.theme = theme;
-        window.settings.nointroOverride = true;
-        _loadTheme(JSON.parse(fs.readFileSync(path.join(themesDir, window.settings.theme+".json"), 'utf-8')));
-    } else {
-        _loadTheme(JSON.parse(fs.readFileSync(path.join(themesDir, window.settings.theme+".json"), 'utf-8')));
-    }
-});
-ipc.send("getThemeOverride");
-// Same for keyboard override/hotswitch
-ipc.once("getKbOverride", (e, layout) => {
-    if (layout !== null) {
-        window.settings.keyboard = layout;
-        window.settings.nointroOverride = true;
-    }
-});
-ipc.send("getKbOverride");
+const themeOverride = await window.edex.hotswitch.getThemeOverride();
+if (themeOverride !== null) {
+    window.settings.theme = themeOverride;
+    window.settings.nointroOverride = true;
+}
+_loadTheme(await window.edex.config.readTheme(window.settings.theme));
+
+// Same for keyboard override
+const kbOverride = await window.edex.hotswitch.getKbOverride();
+if (kbOverride !== null) {
+    window.settings.keyboard = kbOverride;
+    window.settings.nointroOverride = true;
+}
+
+// Use the SI proxy from preload
+window.si = window.edex.si;
 
 // Load UI theme
 window._loadTheme = theme => {
-
     if (document.querySelector("style.theming")) {
         document.querySelector("style.theming").remove();
     }
 
     // Load fonts
-    let mainFont = new FontFace(theme.cssvars.font_main, `url("${path.join(fontsDir, theme.cssvars.font_main.toLowerCase().replace(/ /g, '_')+'.woff2').replace(/\\/g, '/')}")`);
-    let lightFont = new FontFace(theme.cssvars.font_main_light, `url("${path.join(fontsDir, theme.cssvars.font_main_light.toLowerCase().replace(/ /g, '_')+'.woff2').replace(/\\/g, '/')}")`);
-    let termFont = new FontFace(theme.terminal.fontFamily, `url("${path.join(fontsDir, theme.terminal.fontFamily.toLowerCase().replace(/ /g, '_')+'.woff2').replace(/\\/g, '/')}")`);
+    const fontPath = (name) => fontsDir + '/' + name.toLowerCase().replace(/ /g, '_') + '.woff2';
+    let mainFont = new FontFace(theme.cssvars.font_main, `url("${fontPath(theme.cssvars.font_main).replace(/\\/g, '/')}")`);
+    let lightFont = new FontFace(theme.cssvars.font_main_light, `url("${fontPath(theme.cssvars.font_main_light).replace(/\\/g, '/')}")`);
+    let termFont = new FontFace(theme.terminal.fontFamily, `url("${fontPath(theme.terminal.fontFamily).replace(/\\/g, '/')}")`);
 
     document.fonts.add(mainFont);
     document.fonts.load("12px "+theme.cssvars.font_main);
@@ -187,21 +161,16 @@ window._loadTheme = theme => {
         --color_black: ${window._purifyCSS(theme.colors.black)};
         --color_light_black: ${window._purifyCSS(theme.colors.light_black)};
         --color_grey: ${window._purifyCSS(theme.colors.grey)};
-
-        /* Used for error and warning modals */
         --color_red: ${window._purifyCSS(theme.colors.red) || "red"};
         --color_yellow: ${window._purifyCSS(theme.colors.yellow) || "yellow"};
     }
-
     body {
         font-family: var(--font_main), sans-serif;
         cursor: ${(window.settings.nocursorOverride || window.settings.nocursor) ? "none" : "default"} !important;
     }
-
     * {
    	   ${(window.settings.nocursorOverride || window.settings.nocursor) ? "cursor: none !important;" : ""}
 	}
-
     ${window._purifyCSS(theme.injectCSS || "")}
     </style>`;
 
@@ -220,9 +189,8 @@ function initGraphicalErrorHandling() {
             message: `${msg}<br/>        at ${errPath}  ${line}:${col}`
         });
         window.edexErrorsModals.push(errorModal);
-
-        ipc.send("log", "error", `${error}: ${msg}`);
-        ipc.send("log", "debug", `at ${errPath} ${line}:${col}`);
+        window.edex.log.send("error", `${error}: ${msg}`);
+        window.edex.log.send("debug", `at ${errPath} ${line}:${col}`);
     };
 }
 
@@ -246,42 +214,15 @@ function waitForFonts() {
     });
 }
 
-// A proxy function used to add multithreading to systeminformation calls
-async function initSystemInformationProxy() {
-    const { nanoid } = await import('nanoid');
-
-    window.si = new Proxy({}, {
-        apply: () => {throw new Error("Cannot use sysinfo proxy directly as a function")},
-        set: () => {throw new Error("Cannot set a property on the sysinfo proxy")},
-        get: (target, prop, receiver) => {
-            return function(...args) {
-                let callback = (typeof args[args.length - 1] === "function") ? true : false;
-
-                return new Promise((resolve, reject) => {
-                    let id = nanoid();
-                    ipc.once("systeminformation-reply-"+id, (e, res) => {
-                        if (callback) {
-                            args[args.length - 1](res);
-                        }
-                        resolve(res);
-                    });
-                    ipc.send("systeminformation-call", prop, id, ...args);
-                });
-            };
-        }
-    });
-}
-
 // Init audio
 window.audioManager = new AudioManager();
 
 // See #223
-remote.app.focus();
+window.edex.app.focus();
 
 let i = 0;
 if (window.settings.nointro || window.settings.nointroOverride) {
     initGraphicalErrorHandling();
-    await initSystemInformationProxy();
     document.getElementById("boot_screen").remove();
     document.body.setAttribute("class", "");
     waitForFonts().then(initUI);
@@ -290,18 +231,18 @@ if (window.settings.nointro || window.settings.nointroOverride) {
 }
 
 // Startup boot log
-function displayLine() {
+let bootLogCache = null;
+async function displayLine() {
     let bootScreen = document.getElementById("boot_screen");
-    // Resolve assets path at runtime (Vite dev: src/assets, prod: resources/assets)
-    const assetsDir = remote.app.isPackaged
-      ? path.join(process.resourcesPath, 'assets')
-      : path.resolve(remote.app.getAppPath(), 'src', 'assets');
-    let log = fs.readFileSync(path.join(assetsDir, "misc", "boot_log.txt")).toString().split('\n');
+    if (!bootLogCache) {
+        bootLogCache = (await window.edex.config.readBootLog()).split('\n');
+    }
+    let log = bootLogCache;
 
-    function isArchUser() {
-        return os.platform() === "linux"
-                && fs.existsSync("/etc/os-release")
-                && fs.readFileSync("/etc/os-release").toString().includes("arch");
+    async function isArchUser() {
+        return window.edex.platform === "linux"
+                && (await window.edex.fs.exists("/etc/os-release"))
+                && (await window.edex.fs.readFile("/etc/os-release", "utf-8")).includes("arch");
     }
 
     if (typeof log[i] === "undefined") {
@@ -319,7 +260,7 @@ function displayLine() {
 
     switch(true) {
         case i === 2:
-            bootScreen.innerHTML += `eDEX-UI Kernel version ${remote.app.getVersion()} boot at ${Date().toString()}; root:xnu-1699.22.73~1/RELEASE_X86_64`;
+            bootScreen.innerHTML += `eDEX-UI Kernel version ${window.edex.app.getVersion()} boot at ${Date().toString()}; root:xnu-1699.22.73~1/RELEASE_X86_64`;
         case i === 4:
             setTimeout(displayLine, 500);
             break;
@@ -336,7 +277,7 @@ function displayLine() {
             setTimeout(displayLine, 25);
             break;
         case i === 83:
-            if (isArchUser())
+            if (await isArchUser())
                 bootScreen.innerHTML += "btw i use arch<br/>";
             setTimeout(displayLine, 25);
             break;
@@ -348,7 +289,6 @@ function displayLine() {
     }
 }
 
-// Show "logo" and background grid
 async function displayTitleScreen() {
     let bootScreen = document.getElementById("boot_screen");
     if (bootScreen === null) {
@@ -361,31 +301,25 @@ async function displayTitleScreen() {
     window.audioManager.theme.play();
 
     await window._delay(400);
-
     document.body.setAttribute("class", "");
     bootScreen.setAttribute("class", "center");
     bootScreen.innerHTML = "<h1>eDEX-UI</h1>";
     let title = document.querySelector("section > h1");
 
     await window._delay(200);
-
     document.body.setAttribute("class", "solidBackground");
 
     await window._delay(100);
-
     title.setAttribute("style", `background-color: rgb(${window.theme.r}, ${window.theme.g}, ${window.theme.b});border-bottom: 5px solid rgb(${window.theme.r}, ${window.theme.g}, ${window.theme.b});`);
 
     await window._delay(300);
-
     title.setAttribute("style", `border: 5px solid rgb(${window.theme.r}, ${window.theme.g}, ${window.theme.b});`);
 
     await window._delay(100);
-
     title.setAttribute("style", "");
     title.setAttribute("class", "glitch");
 
     await window._delay(500);
-
     document.body.setAttribute("class", "");
     title.setAttribute("class", "");
     title.setAttribute("style", `border: 5px solid rgb(${window.theme.r}, ${window.theme.g}, ${window.theme.b});`);
@@ -396,29 +330,23 @@ async function displayTitleScreen() {
         return true;
     }
     initGraphicalErrorHandling();
-    await initSystemInformationProxy();
     waitForFonts().then(() => {
         bootScreen.remove();
         initUI();
     });
 }
 
-// Returns the user's desired display name
 async function getDisplayName() {
     let user = window.settings.username || null;
-    if (user)
-        return user;
-
+    if (user) return user;
     try {
         const usernameModule = await import('username');
         const getUserName = usernameModule.default || usernameModule;
         user = await getUserName();
     } catch (e) {}
-
     return user;
 }
 
-// Create the UI's html structure and initialize the terminal client and the keyboard
 async function initUI() {
     document.body.innerHTML += `<section class="mod_column" id="mod_column_left">
         <h3 class="title"><p>PANEL</p><p>SYSTEM</p></h3>
@@ -432,36 +360,33 @@ async function initUI() {
     </section>`;
 
     await window._delay(10);
-
     window.audioManager.expand.play();
     document.getElementById("main_shell").setAttribute("style", "height:0%;margin-bottom:30vh;");
 
     await window._delay(500);
-
     document.getElementById("main_shell").setAttribute("style", "margin-bottom: 30vh;");
     document.querySelector("#main_shell > h3.title").setAttribute("style", "");
 
     await window._delay(700);
-
     document.getElementById("main_shell").setAttribute("style", "opacity: 0;");
     document.body.innerHTML += `
     <section id="filesystem" style="width: 0px;" class="${window.settings.hideDotfiles ? "hideDotfiles" : ""} ${window.settings.fsListView ? "list-view" : ""}">
     </section>
     <section id="keyboard" style="opacity:0;">
     </section>`;
+
+    // Load keyboard layout via preload bridge
+    const kbLayout = await window.edex.config.readKeyboardLayout(window.settings.keyboard);
     window.keyboard = new Keyboard({
-        layout: path.join(keyboardsDir, window.settings.keyboard+".json"),
+        layout: kbLayout,
         container: "keyboard"
     });
 
     await window._delay(10);
-
     document.getElementById("main_shell").setAttribute("style", "");
 
     await window._delay(270);
-
     let greeter = document.getElementById("main_shell_greeting");
-
     getDisplayName().then(user => {
         if (user) {
             greeter.innerHTML += `Welcome back, <em>${user}</em>`;
@@ -469,42 +394,32 @@ async function initUI() {
             greeter.innerHTML += "Welcome back";
         }
     });
-
     greeter.setAttribute("style", "opacity: 1;");
-
     document.getElementById("filesystem").setAttribute("style", "");
     document.getElementById("keyboard").setAttribute("style", "");
     document.getElementById("keyboard").setAttribute("class", "animation_state_1");
     window.audioManager.keyboard.play();
 
     await window._delay(100);
-
     document.getElementById("keyboard").setAttribute("class", "animation_state_1 animation_state_2");
 
     await window._delay(1000);
-
     greeter.setAttribute("style", "opacity: 0;");
 
     await window._delay(100);
-
     document.getElementById("keyboard").setAttribute("class", "");
 
     await window._delay(400);
-
     greeter.remove();
 
     // Initialize modules
     window.mods = {};
-
-    // Left column
     window.mods.clock = new Clock("mod_column_left");
     window.mods.sysinfo = new Sysinfo("mod_column_left");
     window.mods.hardwareInspector = new HardwareInspector("mod_column_left");
     window.mods.cpuinfo = new Cpuinfo("mod_column_left");
     window.mods.ramwatcher = new RAMwatcher("mod_column_left");
     window.mods.toplist = new Toplist("mod_column_left");
-
-    // Right column
     window.mods.netstat = new Netstat("mod_column_right");
     window.mods.globe = new LocationGlobe("mod_column_right");
     window.mods.conninfo = new Conninfo("mod_column_right");
@@ -521,12 +436,8 @@ async function initUI() {
             clearInterval(x);
         } else {
             window.audioManager.panels.play();
-            if (left[idx]) {
-                left[idx].setAttribute("style", "animation-play-state: running;");
-            }
-            if (right[idx]) {
-                right[idx].setAttribute("style", "animation-play-state: running;");
-            }
+            if (left[idx]) left[idx].setAttribute("style", "animation-play-state: running;");
+            if (right[idx]) right[idx].setAttribute("style", "animation-play-state: running;");
             idx++;
         }
     }, 500);
@@ -560,35 +471,26 @@ async function initUI() {
     window.term[0].onprocesschange = p => {
         document.getElementById("shell_tab0").innerHTML = `<p>MAIN - ${p}</p>`;
     };
-    // Prevent losing hardware keyboard focus on the terminal when using touch keyboard
     window.onmouseup = e => {
         if (window.keyboard.linkedToTerm) window.term[window.currentTerm].term.focus();
     };
-    window.term[0].term.writeln("\x1b[1m"+`Welcome to eDEX-UI v${remote.app.getVersion()} - Electron v${process.versions.electron}`+"\x1b[0m");
+    window.term[0].term.writeln("\x1b[1m"+`Welcome to eDEX-UI v${window.edex.app.getVersion()} - Electron v${window.edex.electronVersion}`+"\x1b[0m");
 
     await window._delay(100);
-
-    window.fsDisp = new FilesystemDisplay({
-        parentId: "filesystem"
-    });
+    window.fsDisp = new FilesystemDisplay({ parentId: "filesystem" });
 
     await window._delay(200);
-
     document.getElementById("filesystem").setAttribute("style", "opacity: 1;");
-
-    // Resend terminal CWD to fsDisp if we're hot reloading
     if (window.performance.navigation.type === 1) {
         window.term[window.currentTerm].resendCWD();
     }
 
     await window._delay(200);
-
     window.updateCheck = new UpdateChecker();
 }
 
 // Cleanup all active modules before reload/theme switch
 function destroyAll() {
-    // Destroy all terminal instances
     if (window.term) {
         Object.keys(window.term).forEach(key => {
             if (window.term[key] && typeof window.term[key].destroy === 'function') {
@@ -596,7 +498,6 @@ function destroyAll() {
             }
         });
     }
-    // Destroy all monitor modules
     if (window.mods) {
         Object.keys(window.mods).forEach(key => {
             if (window.mods[key] && typeof window.mods[key].destroy === 'function') {
@@ -604,38 +505,29 @@ function destroyAll() {
             }
         });
     }
-    // Destroy filesystem display
-    if (window.fsDisp && typeof window.fsDisp.destroy === 'function') {
-        window.fsDisp.destroy();
-    }
-    // Destroy keyboard
-    if (window.keyboard && typeof window.keyboard.destroy === 'function') {
-        window.keyboard.destroy();
-    }
-    // Destroy audio manager
-    if (window.audioManager && typeof window.audioManager.destroy === 'function') {
-        window.audioManager.destroy();
-    }
-    // Close all modals
+    if (window.fsDisp && typeof window.fsDisp.destroy === 'function') window.fsDisp.destroy();
+    if (window.keyboard && typeof window.keyboard.destroy === 'function') window.keyboard.destroy();
+    if (window.audioManager && typeof window.audioManager.destroy === 'function') window.audioManager.destroy();
     Modal.destroyAll();
 }
 window.destroyAll = destroyAll;
 
 window.themeChanger = theme => {
-    ipc.send("setThemeOverride", theme);
+    window.edex.hotswitch.setThemeOverride(theme);
     setTimeout(() => {
         destroyAll();
         window.location.reload(true);
     }, 100);
 };
 
-window.remakeKeyboard = layout => {
+window.remakeKeyboard = async (layout) => {
     document.getElementById("keyboard").innerHTML = "";
+    const kbLayout = await window.edex.config.readKeyboardLayout(layout);
     window.keyboard = new Keyboard({
-        layout: path.join(keyboardsDir, layout+".json" || window.settings.keyboard+".json"),
+        layout: kbLayout,
         container: "keyboard"
     });
-    ipc.send("setKbOverride", layout);
+    window.edex.hotswitch.setKbOverride(layout);
 };
 
 window.focusShellTab = number => {
@@ -643,39 +535,31 @@ window.focusShellTab = number => {
 
     if (number !== window.currentTerm && window.term[number]) {
         window.currentTerm = number;
-
         document.querySelectorAll(`ul#main_shell_tabs > li:not(:nth-child(${number+1}))`).forEach(e => {
             e.setAttribute("class", "");
         });
         document.getElementById("shell_tab"+number).setAttribute("class", "active");
-
         document.querySelectorAll(`div#main_shell_innercontainer > pre:not(:nth-child(${number+1}))`).forEach(e => {
             e.setAttribute("class", "");
         });
         document.getElementById("terminal"+number).setAttribute("class", "active");
-
         window.term[number].fit();
         window.term[number].term.focus();
         window.term[number].resendCWD();
-
         window.fsDisp.followTab();
     } else if (number > 0 && number <= 4 && window.term[number] !== null && typeof window.term[number] !== "object") {
         window.term[number] = null;
-
         document.getElementById("shell_tab"+number).innerHTML = "<p>LOADING...</p>";
-        ipc.send("ttyspawn", "true");
-        ipc.once("ttyspawn-reply", (e, r) => {
-            if (r.startsWith("ERROR")) {
-                document.getElementById("shell_tab"+number).innerHTML = "<p>ERROR</p>";
-            } else if (r.startsWith("SUCCESS")) {
-                let port = Number(r.substr(9));
 
+        window.edex.terminal.spawn().then(result => {
+            if (result.error) {
+                document.getElementById("shell_tab"+number).innerHTML = "<p>ERROR</p>";
+            } else {
+                let port = result.port;
                 window.term[number] = new Terminal({
-                    role: "client",
                     parentId: "terminal"+number,
                     port
                 });
-
                 window.term[number].onclose = e => {
                     delete window.term[number].onprocesschange;
                     document.getElementById("shell_tab"+number).innerHTML = "<p>EMPTY</p>";
@@ -684,11 +568,9 @@ window.focusShellTab = number => {
                     delete window.term[number];
                     window.useAppShortcut("PREVIOUS_TAB");
                 };
-
                 window.term[number].onprocesschange = p => {
                     document.getElementById("shell_tab"+number).innerHTML = `<p>#${number+1} - ${p}</p>`;
                 };
-
                 document.getElementById("shell_tab"+number).innerHTML = `<p>::${port}</p>`;
                 setTimeout(() => {
                     window.focusShellTab(number);
@@ -702,20 +584,19 @@ window.focusShellTab = number => {
 window.openSettings = async () => {
     if (document.getElementById("settingsEditor")) return;
 
-    let keyboards, themes, monitors, ifaces;
-    fs.readdirSync(keyboardsDir).forEach(kb => {
-        if (!kb.endsWith(".json")) return;
-        kb = kb.replace(".json", "");
+    let keyboards = "", themes = "", monitors = "", ifaces = "";
+    const kbList = await window.edex.config.listKeyboards();
+    kbList.forEach(kb => {
         if (kb === window.settings.keyboard) return;
         keyboards += `<option>${kb}</option>`;
     });
-    fs.readdirSync(themesDir).forEach(th => {
-        if (!th.endsWith(".json")) return;
-        th = th.replace(".json", "");
+    const thList = await window.edex.config.listThemes();
+    thList.forEach(th => {
         if (th === window.settings.theme) return;
         themes += `<option>${th}</option>`;
     });
-    for (let i = 0; i < remote.screen.getAllDisplays().length; i++) {
+    const displayCount = await window.edex.app.getDisplayCount();
+    for (let i = 0; i < displayCount; i++) {
         if (i !== window.settings.monitor) monitors += `<option>${i}</option>`;
     }
     let nets = await window.si.networkInterfaces();
@@ -727,13 +608,9 @@ window.openSettings = async () => {
 
     new Modal({
         type: "custom",
-        title: `Settings <i>(v${remote.app.getVersion()})</i>`,
+        title: `Settings <i>(v${window.edex.app.getVersion()})</i>`,
         html: `<table id="settingsEditor">
-                    <tr>
-                        <th>Key</th>
-                        <th>Description</th>
-                        <th>Value</th>
-                    </tr>
+                    <tr><th>Key</th><th>Description</th><th>Value</th></tr>
                     <tr><td>shell</td><td>The program to run as a terminal emulator</td><td><input type="text" id="settingsEditor-shell" value="${window.settings.shell}"></td></tr>
                     <tr><td>shellArgs</td><td>Arguments to pass to the shell</td><td><input type="text" id="settingsEditor-shellArgs" value="${window.settings.shellArgs || ''}"></td></tr>
                     <tr><td>cwd</td><td>Working Directory to start in</td><td><input type="text" id="settingsEditor-cwd" value="${window.settings.cwd}"></td></tr>
@@ -763,10 +640,10 @@ window.openSettings = async () => {
                 <h6 id="settingsEditorStatus">Loaded values from memory</h6>
                 <br>`,
         buttons: [
-            {label: "Open in External Editor", action:`require('electron').shell.openPath('${settingsFile}');electronWin.minimize();`},
+            {label: "Open in External Editor", action:`window.edex.shell.openPath('${settingsFile}');window.edex.window.minimize();`},
             {label: "Save to Disk", action: "window.writeSettingsFile()"},
             {label: "Reload UI", action: "window.location.reload(true);"},
-            {label: "Restart eDEX", action: "require('@electron/remote').app.relaunch();require('@electron/remote').app.quit();"}
+            {label: "Restart eDEX", action: "window.edex.app.relaunch();"}
         ]
     }, () => {
         window.keyboard.attach();
@@ -775,7 +652,7 @@ window.openSettings = async () => {
 };
 
 window.writeFile = (filePath) => {
-    fs.writeFile(filePath, document.getElementById("fileEdit").value, "utf-8", () => {
+    window.edex.config.writeFile(filePath, document.getElementById("fileEdit").value).then(() => {
         document.getElementById("fedit-status").innerHTML = "<i>File saved.</i>";
     });
 };
@@ -816,16 +693,15 @@ window.writeSettingsFile = () => {
         }
     });
 
-    fs.writeFileSync(settingsFile, JSON.stringify(window.settings, "", 4));
+    window.edex.config.writeSettings(window.settings);
     document.getElementById("settingsEditorStatus").innerText = "New values written to settings.json file at "+new Date().toTimeString();
 };
 
 window.toggleFullScreen = () => {
-    let useFullscreen = (electronWin.isFullScreen() ? false : true);
-    electronWin.setFullScreen(useFullscreen);
-
+    let useFullscreen = !window.edex.window.isFullScreen();
+    window.edex.window.setFullScreen(useFullscreen);
     window.lastWindowState["useFullscreen"] = useFullscreen;
-    fs.writeFileSync(lastWindowStateFile, JSON.stringify(window.lastWindowState, "", 4));
+    window.edex.config.writeWindowState(window.lastWindowState);
 };
 
 // Display available keyboard shortcuts
@@ -862,7 +738,7 @@ window.openShortcutsHelp = () => {
     window.keyboard.detach();
     new Modal({
         type: "custom",
-        title: `Available Keyboard Shortcuts <i>(v${remote.app.getVersion()})</i>`,
+        title: `Available Keyboard Shortcuts <i>(v${window.edex.app.getVersion()})</i>`,
         html: `<h5>Using either the on-screen or a physical keyboard:</h5>
                 <details open id="shortcutsHelpAccordeon1">
                     <summary>Emulator shortcuts</summary>
@@ -873,7 +749,7 @@ window.openShortcutsHelp = () => {
                     <table class="shortcutsHelp"><tr><th>Enabled</th><th>Trigger</th><th>Command</th><tr>${customList}</table>
                 </details><br>`,
         buttons: [
-            {label: "Open Shortcuts File", action:`require('electron').shell.openPath('${shortcutsFile}');electronWin.minimize();`},
+            {label: "Open Shortcuts File", action:`window.edex.shell.openPath('${shortcutsFile}');window.edex.window.minimize();`},
             {label: "Reload UI", action: "window.location.reload(true);"},
         ]
     }, () => {
@@ -883,16 +759,17 @@ window.openShortcutsHelp = () => {
 
     let wrap1 = document.getElementById('shortcutsHelpAccordeon1');
     let wrap2 = document.getElementById('shortcutsHelpAccordeon2');
-
-    wrap1.addEventListener('toggle', e => {
-        wrap2.open = !wrap1.open;
-    });
-    wrap2.addEventListener('toggle', e => {
-        wrap1.open = !wrap2.open;
-    });
+    wrap1.addEventListener('toggle', e => { wrap2.open = !wrap1.open; });
+    wrap2.addEventListener('toggle', e => { wrap1.open = !wrap2.open; });
 };
 
 window.useAppShortcut = action => {
+    // Handle shell shortcuts (objects from main process)
+    if (typeof action === 'object' && action.type === 'shell') {
+        let fn = action.linebreak ? "writelr" : "write";
+        window.term[window.currentTerm][fn](action.action);
+        return true;
+    }
     switch(action) {
         case "COPY":
             window.term[window.currentTerm].clipboard.copy();
@@ -938,7 +815,7 @@ window.useAppShortcut = action => {
         case "FS_LIST_VIEW": window.fsDisp.toggleListview(); return true;
         case "FS_DOTFILES": window.fsDisp.toggleHidedotfiles(); return true;
         case "KB_PASSMODE": window.keyboard.togglePasswordMode(); return true;
-        case "DEV_DEBUG": remote.getCurrentWindow().webContents.toggleDevTools(); return true;
+        case "DEV_DEBUG": window.edex.window.toggleDevTools(); return true;
         case "DEV_RELOAD": destroyAll(); window.location.reload(true); return true;
         default:
             console.warn(`Unknown "${action}" app shortcut action`);
@@ -946,75 +823,43 @@ window.useAppShortcut = action => {
     }
 };
 
-// Global keyboard shortcuts
-const globalShortcut = remote.globalShortcut;
-globalShortcut.unregisterAll();
-
+// Global keyboard shortcuts - now managed by main process
 window.registerKeyboardShortcuts = () => {
-    window.shortcuts.forEach(cut => {
-        if (!cut.enabled) return;
-
-        if (cut.type === "app") {
-            if (cut.action === "TAB_X") {
-                for (let i = 1; i <= 5; i++) {
-                    let trigger = cut.trigger.replace("X", i);
-                    let dfn = () => { window.useAppShortcut(`TAB_${i}`); };
-                    globalShortcut.register(trigger, dfn);
-                }
-            } else {
-                globalShortcut.register(cut.trigger, () => {
-                    window.useAppShortcut(cut.action);
-                });
-            }
-        } else if (cut.type === "shell") {
-            globalShortcut.register(cut.trigger, () => {
-                let fn = (cut.linebreak) ? "writelr" : "write";
-                window.term[window.currentTerm][fn](cut.action);
-            });
-        } else {
-            console.warn(`${cut.trigger} has unknown type`);
-        }
-    });
+    window.edex.shortcuts.registerAll(window.shortcuts);
 };
 window.registerKeyboardShortcuts();
+
+// Listen for shortcut triggers from main process
+window.edex.shortcuts.onTriggered(action => {
+    window.useAppShortcut(action);
+});
 
 // See #361
 window.addEventListener("focus", () => {
     window.registerKeyboardShortcuts();
 });
-
 window.addEventListener("blur", () => {
-    globalShortcut.unregisterAll();
+    window.edex.shortcuts.unregisterAll();
 });
 
 // Prevent showing menu, exiting fullscreen or app with keyboard shortcuts
 document.addEventListener("keydown", e => {
-    if (e.key === "Alt") {
-        e.preventDefault();
-    }
-    if (e.code.startsWith("Alt") && e.ctrlKey && e.shiftKey) {
-        e.preventDefault();
-    }
-    if (e.key === "F11" && !window.settings.allowWindowed) {
-        e.preventDefault();
-    }
-    if (e.code === "KeyD" && e.ctrlKey) {
-        e.preventDefault();
-    }
-    if (e.code === "KeyA" && e.ctrlKey) {
-        e.preventDefault();
-    }
+    if (e.key === "Alt") e.preventDefault();
+    if (e.code.startsWith("Alt") && e.ctrlKey && e.shiftKey) e.preventDefault();
+    if (e.key === "F11" && !window.settings.allowWindowed) e.preventDefault();
+    if (e.code === "KeyD" && e.ctrlKey) e.preventDefault();
+    if (e.code === "KeyA" && e.ctrlKey) e.preventDefault();
 });
 
 // Fix #265
 window.addEventListener("keyup", e => {
-    if (os.platform() === "win32" && e.key === "F4" && e.altKey === true) {
-        remote.app.quit();
+    if (window.edex.platform === "win32" && e.key === "F4" && e.altKey === true) {
+        window.edex.app.quit();
     }
 });
 
 // Fix double-tap zoom on touchscreens
-electron.webFrame.setVisualZoomLevelLimits(1, 1);
+window.edex.setZoomLimits(1, 1);
 
 // Resize terminal with window
 window.onresize = () => {
@@ -1025,31 +870,27 @@ window.onresize = () => {
     }
 };
 
-// See #413
+// See #413 - Keep 16:9 geometry in windowed mode
 window.resizeTimeout = null;
-let electronWin = remote.getCurrentWindow();
-electronWin.on("resize", () => {
+window.edex.window.onResize(() => {
     if (window.settings.keepGeometry === false) return;
     clearTimeout(window.resizeTimeout);
     window.resizeTimeout = setTimeout(() => {
-        let win = remote.getCurrentWindow();
-        if (win.isFullScreen()) return false;
-        if (win.isMaximized()) {
-            win.unmaximize();
-            win.setFullScreen(true);
+        if (window.edex.window.isFullScreen()) return false;
+        if (window.edex.window.isMaximized()) {
+            window.edex.window.unmaximize();
+            window.edex.window.setFullScreen(true);
             return false;
         }
-
-        let size = win.getSize();
-
+        let size = window.edex.window.getSize();
         if (size[0] >= size[1]) {
-            win.setSize(size[0], parseInt(size[0] * 9 / 16));
+            window.edex.window.setSize(size[0], parseInt(size[0] * 9 / 16));
         } else {
-            win.setSize(size[1], parseInt(size[1] * 9 / 16));
+            window.edex.window.setSize(size[1], parseInt(size[1] * 9 / 16));
         }
     }, 100);
 });
 
-electronWin.on("leave-full-screen", () => {
-    remote.getCurrentWindow().setSize(960, 540);
+window.edex.window.onLeaveFullScreen(() => {
+    window.edex.window.setSize(960, 540);
 });
