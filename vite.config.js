@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite';
 import electron from 'vite-plugin-electron';
-import electronRenderer from 'vite-plugin-electron-renderer';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -23,9 +22,6 @@ export default defineConfig({
             rollupOptions: {
               external: [
                 'electron',
-                '@electron/remote/main',
-                '@electron/remote/main/index.js',
-                '@electron/remote',
                 'node-pty',
                 'osx-temperature-sensor',
                 'systeminformation',
@@ -70,17 +66,6 @@ export default defineConfig({
         },
       },
     ]),
-    // Enable Node.js APIs in the renderer process
-    electronRenderer({
-      nodeIntegration: true,
-      resolve: {
-        '@electron/remote': { type: 'cjs' },
-        'systeminformation': { type: 'cjs' },
-        'osx-temperature-sensor': { type: 'cjs' },
-        'geolite2-redist': { type: 'cjs' },
-        'maxmind': { type: 'cjs' },
-      },
-    }),
   ],
   build: {
     outDir: path.resolve(__dirname, 'dist'),
@@ -91,17 +76,7 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'src/ui.html'),
       },
-      external: [
-        'electron',
-        '@electron/remote',
-      ],
     },
-  },
-  optimizeDeps: {
-    exclude: [
-      '@electron/remote',
-      'electron',
-    ],
   },
   resolve: {
     alias: {

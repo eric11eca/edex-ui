@@ -99,7 +99,6 @@
     }
   },
   "dependencies": {
-    "@electron/remote": "^2.1.2",
     "color": "3.2.1",
     "geolite2-redist": "^2.0.4",
     "howler": "2.2.3",
@@ -128,8 +127,7 @@
     "electron": "^28.3.3",
     "electron-builder": "^25.1.8",
     "vite": "^6.0.0",
-    "vite-plugin-electron": "^0.28.0",
-    "vite-plugin-electron-renderer": "^0.14.0"
+    "vite-plugin-electron": "^0.28.0"
   },
   "optionalDependencies": {
     "cson-parser": "4.0.9",

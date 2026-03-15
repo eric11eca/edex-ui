@@ -37,9 +37,7 @@ if (!gotLock) {
 
 signale.time("Startup");
 
-// Initialize @electron/remote
-import remoteMain from '@electron/remote/main/index.js';
-remoteMain.initialize();
+// @electron/remote removed - using preload bridge with contextIsolation: true
 
 ipcMain.on("log", (e, type, content) => {
   signale[type](content);
@@ -203,11 +201,11 @@ function createWindow(settings) {
     backgroundColor: '#000000',
     webPreferences: {
       devTools: true,
-      enableRemoteModule: true,
-      contextIsolation: false,
+      contextIsolation: true,
       backgroundThrottling: false,
       webSecurity: !isDev,
-      nodeIntegration: true,
+      nodeIntegration: false,
+      sandbox: false, // preload needs Node.js APIs
       nodeIntegrationInSubFrames: false,
       allowRunningInsecureContent: false,
       experimentalFeatures: settings.experimentalFeatures || false,
@@ -216,9 +214,6 @@ function createWindow(settings) {
         : path.join(__dirname, 'preload.js'),
     },
   });
-
-  // Enable @electron/remote for this window
-  remoteMain.enable(win.webContents);
 
   if (isDev) {
     // In dev mode, Vite serves the HTML
