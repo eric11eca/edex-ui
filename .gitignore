@@ -40,5 +40,7 @@ jspm_packages
 .idea
 
 dist
+dist-electron
+release
 prebuild-src
 src/node_modules
