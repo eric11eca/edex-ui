@@ -1,15 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import mime from 'mime-types';
-import remote from '@electron/remote';
+const remote = require('@electron/remote');
 import { Modal } from './modal.class.js';
 import { DocReader } from './docReader.class.js';
 import { MediaPlayer } from './mediaPlayer.class.js';
+import fileIconsMatcher from '@assets/misc/file-icons-match.js';
 import fileIcons from '@assets/icons/file-icons.json';
-
-// file-icons-match.js uses module.exports = matchIcon (CJS pattern)
-// Use dynamic require since Vite's CJS interop doesn't handle this file well
-const fileIconsMatcher = require(require('path').join(__dirname, 'assets', 'misc', 'file-icons-match.js'));
 
 const settingsDir = remote.app.getPath("userData");
 const themesDir = path.join(settingsDir, "themes");

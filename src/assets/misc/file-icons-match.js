@@ -2413,4 +2413,6 @@ function matchIcon(filename) {
     if (/\.zil$/i.test(filename)) { return "zork"; }
     if (/\.mud$/i.test(filename)) { return "zork"; }
 }
-module.exports = matchIcon;
+export default matchIcon;
+// Keep CJS compat for multithread-worker or other CJS consumers
+if (typeof module !== 'undefined') module.exports = matchIcon;

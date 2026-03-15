@@ -3,7 +3,7 @@ import net from 'node:net';
 import path from 'node:path';
 import geolite2 from 'geolite2-redist';
 import maxmind from 'maxmind';
-import remote from '@electron/remote';
+const remote = require('@electron/remote');
 import { ipcRenderer } from 'electron';
 
 class Netstat {

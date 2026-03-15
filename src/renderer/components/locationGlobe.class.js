@@ -1,12 +1,11 @@
-import path from 'node:path';
 import geodata from '@assets/misc/grid.json';
+// encom-globe.js is a vendor script that sets window.ENCOM as a side effect
+import '@assets/vendor/encom-globe.js';
 
 class LocationGlobe {
     constructor(parentId) {
         if (!parentId) throw "Missing parameters";
 
-        // Load encom-globe (sets window.ENCOM)
-        require(path.join(__dirname, "assets/vendor/encom-globe.js"));
         this.ENCOM = window.ENCOM;
 
         this.parent = document.getElementById(parentId);

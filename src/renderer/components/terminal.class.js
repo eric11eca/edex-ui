@@ -4,7 +4,7 @@ import { FitAddon } from 'xterm-addon-fit';
 import { LigaturesAddon } from 'xterm-addon-ligatures';
 import { WebglAddon } from 'xterm-addon-webgl';
 import { ipcRenderer } from 'electron';
-import remote from '@electron/remote';
+const remote = require('@electron/remote');
 import color from 'color';
 
 class Terminal {

@@ -48,7 +48,10 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import electron from 'electron';
-import remote from '@electron/remote';
+
+// @electron/remote must use require() - it accesses Electron internals
+// that aren't available during Vite's module resolution
+const remote = require('@electron/remote');
 
 const ipc = electron.ipcRenderer;
 
@@ -289,7 +292,11 @@ if (window.settings.nointro || window.settings.nointroOverride) {
 // Startup boot log
 function displayLine() {
     let bootScreen = document.getElementById("boot_screen");
-    let log = fs.readFileSync(path.join(__dirname, "assets", "misc", "boot_log.txt")).toString().split('\n');
+    // Resolve assets path at runtime (Vite dev: src/assets, prod: resources/assets)
+    const assetsDir = remote.app.isPackaged
+      ? path.join(process.resourcesPath, 'assets')
+      : path.resolve(remote.app.getAppPath(), 'src', 'assets');
+    let log = fs.readFileSync(path.join(assetsDir, "misc", "boot_log.txt")).toString().split('\n');
 
     function isArchUser() {
         return os.platform() === "linux"

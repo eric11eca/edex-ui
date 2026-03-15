@@ -1,9 +1,15 @@
 import path from 'node:path';
 import { Howl, Howler } from 'howler';
 
+// Resolve the src/ directory at runtime (works in both dev and prod)
+const remote = require('@electron/remote');
+const srcDir = remote.app.isPackaged
+  ? path.join(process.resourcesPath, 'assets')
+  : path.resolve(remote.app.getAppPath(), 'src', 'assets');
+
 class AudioManager {
     constructor() {
-        const audioDir = path.join(__dirname, "assets", "audio");
+        const audioDir = path.join(srcDir, "audio");
 
         if (window.settings.audio === true) {
             if(window.settings.disableFeedbackAudio === false) {

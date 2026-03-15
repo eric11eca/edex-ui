@@ -196,7 +196,7 @@ function createWindow(settings) {
     show: false,
     resizable: true,
     movable: settings.allowWindowed || false,
-    fullscreen: settings.forceFullscreen || false,
+    fullscreen: isDev ? false : (settings.forceFullscreen || false),
     autoHideMenuBar: true,
     frame: settings.allowWindowed || false,
     backgroundColor: '#000000',
@@ -205,7 +205,7 @@ function createWindow(settings) {
       enableRemoteModule: true,
       contextIsolation: false,
       backgroundThrottling: false,
-      webSecurity: true,
+      webSecurity: !isDev,
       nodeIntegration: true,
       nodeIntegrationInSubFrames: false,
       allowRunningInsecureContent: false,
@@ -220,7 +220,12 @@ function createWindow(settings) {
     // In dev mode, Vite serves the HTML
     const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
     if (VITE_DEV_SERVER_URL) {
-      win.loadURL(VITE_DEV_SERVER_URL);
+      // Vite root is src/, so ui.html is at /ui.html
+      const url = VITE_DEV_SERVER_URL.endsWith('/')
+        ? VITE_DEV_SERVER_URL + 'ui.html'
+        : VITE_DEV_SERVER_URL + '/ui.html';
+      signale.info(`Loading dev URL: ${url}`);
+      win.loadURL(url);
     } else {
       win.loadFile(htmlPath);
     }
@@ -230,6 +235,17 @@ function createWindow(settings) {
 
   signale.complete("Frontend window created!");
   win.show();
+  if (isDev) {
+    win.webContents.openDevTools({ mode: 'detach' });
+    win.webContents.on('console-message', (e, level, message, line, sourceId) => {
+      if (level >= 2) { // warnings and errors
+        signale.warn(`[Renderer] ${message}`);
+      }
+    });
+    win.webContents.on('did-fail-load', (e, code, desc, url) => {
+      signale.error(`[Renderer] Failed to load: ${url} (${code}: ${desc})`);
+    });
+  }
   if (!settings.allowWindowed) {
     win.setResizable(false);
   } else {

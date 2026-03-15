@@ -1,6 +1,6 @@
 import https from 'node:https';
 import { ipcRenderer, shell } from 'electron';
-import remote from '@electron/remote';
+const remote = require('@electron/remote');
 import { Modal } from './modal.class.js';
 
 class UpdateChecker {
