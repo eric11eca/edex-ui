@@ -158,20 +158,35 @@ class MediaPlayer {
         });
         if (fullscreen) fullscreen.addEventListener("click", () => { this.handleFullscreen(); });
 
-        document.addEventListener("fullscreenchange", () => {
+        this._fullscreenChangeHandler = () => {
             this.setFullscreenData(!!(document.fullscreenElement));
-        });
-        document.addEventListener("mouseup", (e) => {
+        };
+        this._mouseupHandler = (e) => {
             if (volumeDrag) {
                 volumeDrag = false;
                 this.updateVolume(e.pageX);
             }
-        });
-        document.addEventListener("mousemove", (e) => {
+        };
+        this._mousemoveHandler = (e) => {
             if (volumeDrag) {
                 this.updateVolume(e.pageX);
             }
-        });
+        };
+        document.addEventListener("fullscreenchange", this._fullscreenChangeHandler);
+        document.addEventListener("mouseup", this._mouseupHandler);
+        document.addEventListener("mousemove", this._mousemoveHandler);
+    }
+
+    destroy() {
+        if (this._fullscreenChangeHandler) {
+            document.removeEventListener("fullscreenchange", this._fullscreenChangeHandler);
+        }
+        if (this._mouseupHandler) {
+            document.removeEventListener("mouseup", this._mouseupHandler);
+        }
+        if (this._mousemoveHandler) {
+            document.removeEventListener("mousemove", this._mousemoveHandler);
+        }
     }
 }
 

@@ -552,7 +552,6 @@ async function initUI() {
         </div>`;
     window.term = {
         0: new Terminal({
-            role: "client",
             parentId: "terminal0",
             port: window.settings.port || 3000
         })
@@ -587,9 +586,45 @@ async function initUI() {
     window.updateCheck = new UpdateChecker();
 }
 
+// Cleanup all active modules before reload/theme switch
+function destroyAll() {
+    // Destroy all terminal instances
+    if (window.term) {
+        Object.keys(window.term).forEach(key => {
+            if (window.term[key] && typeof window.term[key].destroy === 'function') {
+                window.term[key].destroy();
+            }
+        });
+    }
+    // Destroy all monitor modules
+    if (window.mods) {
+        Object.keys(window.mods).forEach(key => {
+            if (window.mods[key] && typeof window.mods[key].destroy === 'function') {
+                window.mods[key].destroy();
+            }
+        });
+    }
+    // Destroy filesystem display
+    if (window.fsDisp && typeof window.fsDisp.destroy === 'function') {
+        window.fsDisp.destroy();
+    }
+    // Destroy keyboard
+    if (window.keyboard && typeof window.keyboard.destroy === 'function') {
+        window.keyboard.destroy();
+    }
+    // Destroy audio manager
+    if (window.audioManager && typeof window.audioManager.destroy === 'function') {
+        window.audioManager.destroy();
+    }
+    // Close all modals
+    Modal.destroyAll();
+}
+window.destroyAll = destroyAll;
+
 window.themeChanger = theme => {
     ipc.send("setThemeOverride", theme);
     setTimeout(() => {
+        destroyAll();
         window.location.reload(true);
     }, 100);
 };
@@ -904,7 +939,7 @@ window.useAppShortcut = action => {
         case "FS_DOTFILES": window.fsDisp.toggleHidedotfiles(); return true;
         case "KB_PASSMODE": window.keyboard.togglePasswordMode(); return true;
         case "DEV_DEBUG": remote.getCurrentWindow().webContents.toggleDevTools(); return true;
-        case "DEV_RELOAD": window.location.reload(true); return true;
+        case "DEV_RELOAD": destroyAll(); window.location.reload(true); return true;
         default:
             console.warn(`Unknown "${action}" app shortcut action`);
             return false;

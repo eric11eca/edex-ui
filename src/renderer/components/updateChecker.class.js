@@ -69,6 +69,9 @@ class UpdateChecker {
             this._fail(e);
         });
     }
+    destroy() {
+        // One-shot HTTP request; no persistent resources
+    }
 }
 
 export { UpdateChecker };

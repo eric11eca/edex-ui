@@ -183,6 +183,13 @@ class Modal {
 
         return this.id;
     }
+    static destroyAll() {
+        Object.keys(window.modals).forEach(id => {
+            if (window.modals[id] && typeof window.modals[id].close === 'function') {
+                window.modals[id].close();
+            }
+        });
+    }
 }
 
 export { Modal };

@@ -172,6 +172,15 @@ class Cpuinfo {
             this.updatingCPUtasks = false;
         });
     }
+    destroy() {
+        if (this.loadUpdater) clearInterval(this.loadUpdater);
+        if (this.tempUpdater) clearInterval(this.tempUpdater);
+        if (this.speedUpdater) clearInterval(this.speedUpdater);
+        if (this.tasksUpdater) clearInterval(this.tasksUpdater);
+        if (this.charts) {
+            this.charts.forEach(chart => chart.stop());
+        }
+    }
 }
 
 export { Cpuinfo };

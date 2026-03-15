@@ -81,6 +81,9 @@ class DocReader {
             this.renderPage(pageNum);
         });
     }
+    destroy() {
+        // No persistent resources; modal DOM removal handles cleanup
+    }
 }
 
 export { DocReader };

@@ -22,7 +22,7 @@ class LocationGlobe {
         this.conns = [];
         this._geodata = geodata;
 
-        setTimeout(() => {
+        this._initTimeout = setTimeout(() => {
             let container = document.getElementById("mod_globe_innercontainer");
             let placeholder = document.getElementById("mod_globe_canvas_placeholder");
 
@@ -111,7 +111,7 @@ class LocationGlobe {
             this.globe.addConstellation(constellation);
         }, 2000);
 
-        setTimeout(() => {
+        this._intervalTimeout = setTimeout(() => {
             this.updateLoc();
             this.locUpdater = setInterval(() => {
                 this.updateLoc();
@@ -223,6 +223,23 @@ class LocationGlobe {
                 this.addConn(ip);
             });
         });
+    }
+    destroy() {
+        if (this._initTimeout) clearTimeout(this._initTimeout);
+        if (this._intervalTimeout) clearTimeout(this._intervalTimeout);
+        if (this.locUpdater) clearInterval(this.locUpdater);
+        if (this.connsUpdater) clearInterval(this.connsUpdater);
+        // Stop the animation loop
+        this._animate = null;
+        // Remove window resize listener
+        if (this.resizeHandler) {
+            window.removeEventListener("resize", this.resizeHandler);
+            this.resizeHandler = null;
+        }
+        // Dispose Three.js resources
+        if (this.globe && this.globe.renderer) {
+            this.globe.renderer.dispose();
+        }
     }
 }
 

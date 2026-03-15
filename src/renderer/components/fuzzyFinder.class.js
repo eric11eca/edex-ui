@@ -131,6 +131,9 @@ class FuzzyFinder {
           window.term[window.currentTerm].write(`'${filePath}'`);
           this.disp.close();
      }
+    destroy() {
+        // Modal close handles DOM cleanup
+    }
 }
 
 export { FuzzyFinder };

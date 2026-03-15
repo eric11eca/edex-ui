@@ -178,6 +178,10 @@ class Netstat {
             });
         });
     }
+    destroy() {
+        if (this.infoUpdater) clearInterval(this.infoUpdater);
+        if (this._httpsAgent) this._httpsAgent.destroy();
+    }
 }
 
 export { Netstat };

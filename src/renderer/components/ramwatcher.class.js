@@ -77,6 +77,9 @@ class RAMwatcher {
             [array[i], array[j]] = [array[j], array[i]];
         }
     }
+    destroy() {
+        if (this.infoUpdater) clearInterval(this.infoUpdater);
+    }
 }
 
 export { RAMwatcher };

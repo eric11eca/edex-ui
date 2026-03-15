@@ -55,7 +55,7 @@ class Sysinfo {
         document.querySelector("#mod_sysinfo > div:first-child > h2").innerHTML = months[time.getMonth()]+" "+time.getDate();
 
         let timeToNewDay = ((23 - time.getHours()) * 3600000) + ((59 - time.getMinutes()) * 60000);
-        setTimeout(() => {
+        this._dateTimeout = setTimeout(() => {
             this.updateDate();
         }, timeToNewDay);
     }
@@ -93,6 +93,11 @@ class Sysinfo {
                 indicator.innerHTML = "ON";
             }
         });
+    }
+    destroy() {
+        if (this.uptimeUpdater) clearInterval(this.uptimeUpdater);
+        if (this.batteryUpdater) clearInterval(this.batteryUpdater);
+        if (this._dateTimeout) clearTimeout(this._dateTimeout);
     }
 }
 

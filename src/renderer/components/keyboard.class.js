@@ -1286,6 +1286,10 @@ class Keyboard {
                 return char;
         }
     }
+    destroy() {
+        document.onkeydown = null;
+        document.onkeyup = null;
+    }
 }
 
 export { Keyboard };

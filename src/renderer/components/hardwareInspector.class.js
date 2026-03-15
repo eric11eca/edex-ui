@@ -42,6 +42,9 @@ class HardwareInspector {
             return !filters.includes(word);
         }).slice(0, 2).join(" ");
     }
+    destroy() {
+        if (this.infoUpdater) clearInterval(this.infoUpdater);
+    }
 }
 
 export { HardwareInspector };

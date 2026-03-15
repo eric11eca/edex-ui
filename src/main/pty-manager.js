@@ -5,6 +5,7 @@ import { ipcMain } from 'electron';
 import { readlink } from 'node:fs';
 import { exec } from 'node:child_process';
 import { type as osType } from 'node:os';
+import { TerminalMessage, terminalChannel } from '../shared/terminal-protocol.js';
 
 export class PtyManager {
   constructor(opts) {
@@ -17,51 +18,58 @@ export class PtyManager {
     this.ondisconnected = () => {};
 
     this._disableCWDtracking = false;
-    this._nextTickUpdateTtyCWD = false;
-    this._nextTickUpdateProcess = false;
 
-    this._tick = setInterval(() => {
-      if (this._nextTickUpdateTtyCWD && this._disableCWDtracking === false) {
-        this._nextTickUpdateTtyCWD = false;
+    // Debounced CWD and process tracking (replaces 1000ms polling interval)
+    this._cwdDebounceTimer = null;
+    this._processDebounceTimer = null;
+
+    this._scheduleCwdCheck = () => {
+      if (this._cwdDebounceTimer || this._disableCWDtracking) return;
+      this._cwdDebounceTimer = setTimeout(() => {
+        this._cwdDebounceTimer = null;
         this._getTtyCWD(this.tty).then(cwd => {
           if (this.tty._cwd === cwd) return;
           this.tty._cwd = cwd;
           if (this.renderer) {
-            this.renderer.send("terminal_channel-" + this.port, "New cwd", cwd);
+            this.renderer.send(terminalChannel(this.port), TerminalMessage.NEW_CWD, cwd);
           }
         }).catch(e => {
           if (!this._closed) {
             console.log("Error while tracking TTY working directory: ", e);
             this._disableCWDtracking = true;
             try {
-              this.renderer.send("terminal_channel-" + this.port, "Fallback cwd", opts.cwd || process.env.PWD);
+              this.renderer.send(terminalChannel(this.port), TerminalMessage.FALLBACK_CWD, opts.cwd || process.env.PWD);
             } catch (e) {
               // renderer closed
             }
           }
         });
-      }
+      }, 300);
+    };
 
-      if (this.renderer && this._nextTickUpdateProcess) {
-        this._nextTickUpdateProcess = false;
+    this._scheduleProcessCheck = () => {
+      if (this._processDebounceTimer) return;
+      this._processDebounceTimer = setTimeout(() => {
+        this._processDebounceTimer = null;
+        if (!this.renderer) return;
         this._getTtyProcess(this.tty).then(proc => {
           if (this.tty._process === proc) return;
           this.tty._process = proc;
           if (this.renderer) {
-            this.renderer.send("terminal_channel-" + this.port, "New process", proc);
+            this.renderer.send(terminalChannel(this.port), TerminalMessage.NEW_PROCESS, proc);
           }
         }).catch(e => {
           if (!this._closed) {
             console.log("Error while retrieving TTY subprocess: ", e);
             try {
-              this.renderer.send("terminal_channel-" + this.port, "New process", "");
+              this.renderer.send(terminalChannel(this.port), TerminalMessage.NEW_PROCESS, "");
             } catch (e) {
               // renderer closed
             }
           }
         });
-      }
-    }, 1000);
+      }, 300);
+    };
 
     this.tty = pty.spawn(
       opts.shell || "bash",
@@ -92,18 +100,18 @@ export class PtyManager {
       },
     });
 
-    ipcMain.on("terminal_channel-" + this.port, (e, ...args) => {
+    this._ipcHandler = (e, ...args) => {
       switch (args[0]) {
-        case "Renderer startup":
+        case TerminalMessage.RENDERER_STARTUP:
           this.renderer = e.sender;
           if (!this._disableCWDtracking && this.tty._cwd) {
-            this.renderer.send("terminal_channel-" + this.port, "New cwd", this.tty._cwd);
+            this.renderer.send(terminalChannel(this.port), TerminalMessage.NEW_CWD, this.tty._cwd);
           }
           if (this._disableCWDtracking) {
-            this.renderer.send("terminal_channel-" + this.port, "Fallback cwd", opts.cwd || process.env.PWD);
+            this.renderer.send(terminalChannel(this.port), TerminalMessage.FALLBACK_CWD, opts.cwd || process.env.PWD);
           }
           break;
-        case "Resize":
+        case TerminalMessage.RESIZE:
           let cols = args[1];
           let rows = args[2];
           try {
@@ -116,21 +124,22 @@ export class PtyManager {
         default:
           return;
       }
-    });
+    };
+    ipcMain.on(terminalChannel(this.port), this._ipcHandler);
 
-    this.wss.on("connection", ws => {
+    this.wss.on("connection", wsClient => {
       this.onopened(this.tty._pid);
-      ws.on("close", (code, reason) => {
+      wsClient.on("close", (code, reason) => {
         this.ondisconnected(code, reason);
       });
-      ws.on("message", msg => {
+      wsClient.on("message", msg => {
         this.tty.write(msg.toString());
       });
       this.tty.onData(data => {
-        this._nextTickUpdateTtyCWD = true;
-        this._nextTickUpdateProcess = true;
+        this._scheduleCwdCheck();
+        this._scheduleProcessCheck();
         try {
-          ws.send(data);
+          wsClient.send(data);
         } catch (e) {
           // Websocket closed
         }
@@ -187,13 +196,18 @@ export class PtyManager {
   }
 
   close() {
-    clearInterval(this._tick);
+    if (this._cwdDebounceTimer) clearTimeout(this._cwdDebounceTimer);
+    if (this._processDebounceTimer) clearTimeout(this._processDebounceTimer);
     this.tty.kill();
     this._closed = true;
   }
 
   destroy() {
     this.close();
+    if (this._ipcHandler) {
+      ipcMain.removeListener(terminalChannel(this.port), this._ipcHandler);
+      this._ipcHandler = null;
+    }
     if (this.wss) {
       this.wss.close();
     }

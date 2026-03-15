@@ -84,6 +84,12 @@ class Conninfo {
             });
         }
     }
+    destroy() {
+        if (this.infoUpdater) clearInterval(this.infoUpdater);
+        if (this.charts) {
+            this.charts.forEach(chart => chart.stop());
+        }
+    }
 }
 
 export { Conninfo };

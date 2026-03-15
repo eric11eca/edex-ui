@@ -734,6 +734,10 @@ class FilesystemDisplay {
             }
         };
     }
+    destroy() {
+        if (this._timer) clearInterval(this._timer);
+        if (this._fsWatcher) this._fsWatcher.close();
+    }
 }
 
 export { FilesystemDisplay };

@@ -74,6 +74,9 @@ class AudioManager {
             }
         });
     }
+    destroy() {
+        Howler.unload();
+    }
 }
 
 export { AudioManager };

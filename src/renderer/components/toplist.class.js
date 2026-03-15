@@ -238,6 +238,10 @@ class Toplist {
         window.term[window.currentTerm].term.focus();
         var updateInterval = setInterval(updateProcessList, 1000);
     }
+    destroy() {
+        if (this.listUpdater) clearInterval(this.listUpdater);
+        if (this._element) this._element.onclick = null;
+    }
 }
 
 export { Toplist };
