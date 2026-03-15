@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import which from 'which';
 import { PtyManager } from './pty-manager.js';
+import { init as initIpcHandlers, cleanup as cleanupIpcHandlers } from './ipc-handlers.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -210,6 +211,9 @@ function createWindow(settings) {
       nodeIntegrationInSubFrames: false,
       allowRunningInsecureContent: false,
       experimentalFeatures: settings.experimentalFeatures || false,
+      preload: isDev
+        ? path.join(projectRoot, 'src', 'main', 'preload.js')
+        : path.join(__dirname, 'preload.js'),
     },
   });
 
@@ -328,6 +332,18 @@ app.on('ready', async () => {
 
   createWindow(settings);
 
+  // Initialize IPC handlers for the preload bridge
+  initIpcHandlers({
+    win,
+    assetsBase,
+    settingsFile,
+    shortcutsFile,
+    lastWindowStateFile,
+    themesDir,
+    kblayoutsDir: path.join(app.getPath("userData"), "keyboards"),
+    fontsDir,
+  });
+
   // Support for more terminals (currently limited to 4 extra terms)
   extraTtys = {};
   let basePort = settings.port || 3000;
@@ -419,6 +435,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  cleanupIpcHandlers();
   tty.close();
   Object.keys(extraTtys).forEach(key => {
     if (extraTtys[key] !== null) {

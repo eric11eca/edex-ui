@@ -12,7 +12,7 @@ export default defineConfig({
   plugins: [
     electron([
       {
-        // Main process entry - path relative to project root
+        // Main process entry
         entry: path.resolve(__dirname, 'src/main/index.js'),
         onstart(args) {
           args.startup();
@@ -33,6 +33,30 @@ export default defineConfig({
                 'shell-env',
                 'which',
                 'ws',
+                'geolite2-redist',
+                'maxmind',
+                'nanoid',
+                /^node:/,
+              ],
+              output: {
+                format: 'cjs',
+                entryFileNames: '[name].js',
+              },
+            },
+            sourcemap: true,
+            minify: false,
+          },
+        },
+      },
+      {
+        // Preload script entry
+        entry: path.resolve(__dirname, 'src/main/preload.js'),
+        vite: {
+          build: {
+            outDir: path.resolve(__dirname, 'dist-electron/main'),
+            rollupOptions: {
+              external: [
+                'electron',
                 /^node:/,
               ],
               output: {
