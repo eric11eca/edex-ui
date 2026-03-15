@@ -43,6 +43,8 @@ import { RAMwatcher } from './components/ramwatcher.class.js';
 import { Toplist } from './components/toplist.class.js';
 import { FuzzyFinder } from './components/fuzzyFinder.class.js';
 import { AudioManager } from './components/audiofx.class.js';
+import { EdexStore } from './store/index.js';
+import { SystemMonitorScheduler } from './store/system-monitor.js';
 
 // Make classes available globally for inline onclick handlers
 window.Modal = Modal;
@@ -128,8 +130,25 @@ if (kbOverride !== null) {
     window.settings.nointroOverride = true;
 }
 
-// Use the SI proxy from preload
+// Initialize centralized state store
+const store = new EdexStore({
+    settings: window.settings,
+    shortcuts: window.shortcuts,
+    lastWindowState: window.lastWindowState,
+    theme: null, // set by _loadTheme below
+    network: { offline: true, iface: null, internalIPv4: null, ipinfo: null },
+    systemData: {},
+    terminals: {},
+    activeTerminal: 0,
+    passwordMode: false,
+});
+
+// SI proxy: components use window.si (backed by preload bridge)
+// The SystemMonitorScheduler also writes results to store.systemData.*
 window.si = window.edex.si;
+
+// Start coordinated system monitor scheduler
+const scheduler = new SystemMonitorScheduler(store, window.edex.si);
 
 // Load UI theme
 window._loadTheme = theme => {
@@ -178,6 +197,7 @@ window._loadTheme = theme => {
     window.theme.r = theme.colors.r;
     window.theme.g = theme.colors.g;
     window.theme.b = theme.colors.b;
+    store.set('theme', window.theme);
 };
 
 function initGraphicalErrorHandling() {
@@ -412,13 +432,16 @@ async function initUI() {
     await window._delay(400);
     greeter.remove();
 
+    // Start the system monitor scheduler (coordinated SI polling)
+    scheduler.start();
+
     // Initialize modules
     window.mods = {};
-    window.mods.clock = new Clock("mod_column_left");
-    window.mods.sysinfo = new Sysinfo("mod_column_left");
-    window.mods.hardwareInspector = new HardwareInspector("mod_column_left");
-    window.mods.cpuinfo = new Cpuinfo("mod_column_left");
-    window.mods.ramwatcher = new RAMwatcher("mod_column_left");
+    window.mods.clock = new Clock("mod_column_left", { store });
+    window.mods.sysinfo = new Sysinfo("mod_column_left", { store });
+    window.mods.hardwareInspector = new HardwareInspector("mod_column_left", { store });
+    window.mods.cpuinfo = new Cpuinfo("mod_column_left", { store });
+    window.mods.ramwatcher = new RAMwatcher("mod_column_left", { store });
     window.mods.toplist = new Toplist("mod_column_left");
     window.mods.netstat = new Netstat("mod_column_right");
     window.mods.globe = new LocationGlobe("mod_column_right");
@@ -508,6 +531,7 @@ function destroyAll() {
     if (window.fsDisp && typeof window.fsDisp.destroy === 'function') window.fsDisp.destroy();
     if (window.keyboard && typeof window.keyboard.destroy === 'function') window.keyboard.destroy();
     if (window.audioManager && typeof window.audioManager.destroy === 'function') window.audioManager.destroy();
+    scheduler.destroy();
     Modal.destroyAll();
 }
 window.destroyAll = destroyAll;

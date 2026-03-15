@@ -1,6 +1,9 @@
 class RAMwatcher {
-    constructor(parentId) {
+    constructor(parentId, { store } = {}) {
         if (!parentId) throw "Missing parameters";
+
+        this._store = store;
+        this._unsubs = [];
 
         this.parent = document.getElementById(parentId);
         let modExtContainer = document.createElement("div");
@@ -27,49 +30,53 @@ class RAMwatcher {
         this.points = Array.from(document.querySelectorAll("div.mod_ramwatcher_point"));
         this.shuffleArray(this.points);
 
-        this.currentlyUpdating = false;
-        this.updateInfo();
-        this.infoUpdater = setInterval(() => {
+        // Subscribe to store instead of polling
+        if (store) {
+            this._unsubs.push(store.on('systemData.mem', (data) => {
+                if (data) this._updateFromData(data);
+            }));
+        } else {
+            // Fallback: direct polling (legacy)
+            this.infoUpdater = setInterval(() => { this.updateInfo(); }, 1500);
             this.updateInfo();
-        }, 1500);
+        }
     }
     updateInfo() {
-        if (this.currentlyUpdating) return;
-        this.currentlyUpdating = true;
         window.si.mem().then(data => {
-            if (data.free+data.used !== data.total) throw("RAM Watcher Error: Bad memory values");
-
-            let active = Math.round((440*data.active)/data.total);
-            let available = Math.round((440*(data.available-data.free))/data.total);
-
-            this.points.slice(0, active).forEach(domPoint => {
-                if (domPoint.attributes.class.value !== "mod_ramwatcher_point active") {
-                    domPoint.setAttribute("class", "mod_ramwatcher_point active");
-                }
-            });
-            this.points.slice(active, active+available).forEach(domPoint => {
-                if (domPoint.attributes.class.value !== "mod_ramwatcher_point available") {
-                    domPoint.setAttribute("class", "mod_ramwatcher_point available");
-                }
-            });
-            this.points.slice(active+available, this.points.length).forEach(domPoint => {
-                if (domPoint.attributes.class.value !== "mod_ramwatcher_point free") {
-                    domPoint.setAttribute("class", "mod_ramwatcher_point free");
-                }
-            });
-
-            let totalGiB = Math.round((data.total/1073742000)*10)/10;
-            let usedGiB = Math.round((data.active/1073742000)*10)/10;
-            document.getElementById("mod_ramwatcher_info").innerText = `USING ${usedGiB} OUT OF ${totalGiB} GiB`;
-
-            let usedSwap = Math.round((100*data.swapused)/data.swaptotal);
-            document.getElementById("mod_ramwatcher_swapbar").value = usedSwap || 0;
-
-            let usedSwapGiB = Math.round((data.swapused/1073742000)*10)/10;
-            document.getElementById("mod_ramwatcher_swaptext").innerText = `${usedSwapGiB} GiB`;
-
-            this.currentlyUpdating = false;
+            this._updateFromData(data);
         });
+    }
+    _updateFromData(data) {
+        if (data.free+data.used !== data.total) return; // bad values
+
+        let active = Math.round((440*data.active)/data.total);
+        let available = Math.round((440*(data.available-data.free))/data.total);
+
+        this.points.slice(0, active).forEach(domPoint => {
+            if (domPoint.attributes.class.value !== "mod_ramwatcher_point active") {
+                domPoint.setAttribute("class", "mod_ramwatcher_point active");
+            }
+        });
+        this.points.slice(active, active+available).forEach(domPoint => {
+            if (domPoint.attributes.class.value !== "mod_ramwatcher_point available") {
+                domPoint.setAttribute("class", "mod_ramwatcher_point available");
+            }
+        });
+        this.points.slice(active+available, this.points.length).forEach(domPoint => {
+            if (domPoint.attributes.class.value !== "mod_ramwatcher_point free") {
+                domPoint.setAttribute("class", "mod_ramwatcher_point free");
+            }
+        });
+
+        let totalGiB = Math.round((data.total/1073742000)*10)/10;
+        let usedGiB = Math.round((data.active/1073742000)*10)/10;
+        document.getElementById("mod_ramwatcher_info").innerText = `USING ${usedGiB} OUT OF ${totalGiB} GiB`;
+
+        let usedSwap = Math.round((100*data.swapused)/data.swaptotal);
+        document.getElementById("mod_ramwatcher_swapbar").value = usedSwap || 0;
+
+        let usedSwapGiB = Math.round((data.swapused/1073742000)*10)/10;
+        document.getElementById("mod_ramwatcher_swaptext").innerText = `${usedSwapGiB} GiB`;
     }
     shuffleArray(array) {
         for (let i = array.length - 1; i > 0; i--) {
@@ -79,6 +86,7 @@ class RAMwatcher {
     }
     destroy() {
         if (this.infoUpdater) clearInterval(this.infoUpdater);
+        this._unsubs.forEach(fn => fn());
     }
 }
 

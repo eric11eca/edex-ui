@@ -1,6 +1,9 @@
 class HardwareInspector {
-    constructor(parentId) {
+    constructor(parentId, { store } = {}) {
         if (!parentId) throw "Missing parameters";
+
+        this._store = store;
+        this._unsubs = [];
 
         this.parent = document.getElementById(parentId);
         this._element = document.createElement("div");
@@ -22,10 +25,22 @@ class HardwareInspector {
 
         this.parent.append(this._element);
 
-        this.updateInfo();
-        this.infoUpdater = setInterval(() => {
+        if (store) {
+            // Subscribe to slow tier data
+            this._unsubs.push(store.on('systemData.system', () => this._updateFromStore()));
+            this._unsubs.push(store.on('systemData.chassis', () => this._updateFromStore()));
+        } else {
             this.updateInfo();
-        }, 20000);
+            this.infoUpdater = setInterval(() => { this.updateInfo(); }, 20000);
+        }
+    }
+    _updateFromStore() {
+        const d = this._store.get('systemData.system');
+        const e = this._store.get('systemData.chassis');
+        if (!d || !e) return;
+        document.getElementById("mod_hardwareInspector_manufacturer").innerText = this._trimDataString(d.manufacturer);
+        document.getElementById("mod_hardwareInspector_model").innerText = this._trimDataString(d.model, d.manufacturer, e.type);
+        document.getElementById("mod_hardwareInspector_chassis").innerText = e.type;
     }
     updateInfo() {
         window.si.system().then(d => {
@@ -44,6 +59,7 @@ class HardwareInspector {
     }
     destroy() {
         if (this.infoUpdater) clearInterval(this.infoUpdater);
+        this._unsubs.forEach(fn => fn());
     }
 }
 

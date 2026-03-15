@@ -1,8 +1,9 @@
 class Clock {
-    constructor(parentId) {
+    constructor(parentId, { store } = {}) {
         if (!parentId) throw "Missing parameters";
 
-        this.twelveHours = (window.settings.clockHours === 12);
+        const settings = store ? store.get('settings') : window.settings;
+        this.twelveHours = (settings.clockHours === 12);
 
         this.parent = document.getElementById(parentId);
         this.parent.innerHTML += `<div id="mod_clock" class="${(this.twelveHours) ? "mod_clock_twelve" : ""}">

@@ -1,6 +1,9 @@
 class Sysinfo {
-    constructor(parentId) {
+    constructor(parentId, { store } = {}) {
         if (!parentId) throw "Missing parameters";
+
+        this._store = store;
+        this._unsubs = [];
 
         let osName;
         switch (window.edex.platform) {
@@ -11,7 +14,7 @@ class Sysinfo {
                 osName = "win";
                 break;
             default:
-                osName = os.platform();
+                osName = window.edex.platform;
         }
 
         this.parent = document.getElementById(parentId);
@@ -39,16 +42,20 @@ class Sysinfo {
         this.uptimeUpdater = setInterval(() => {
             this.updateUptime();
         }, 60000);
-        this.updateBattery();
-        this.batteryUpdater = setInterval(() => {
+
+        // Battery: subscribe to store or poll directly
+        if (store) {
+            this._unsubs.push(store.on('systemData.battery', (bat) => {
+                if (bat) this._updateBattery(bat);
+            }));
+        } else {
             this.updateBattery();
-        }, 3000);
+            this.batteryUpdater = setInterval(() => { this.updateBattery(); }, 3000);
+        }
     }
     updateDate() {
         let time = new Date();
-
         document.querySelector("#mod_sysinfo > div:first-child > h1").innerHTML = time.getFullYear();
-
         const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
         document.querySelector("#mod_sysinfo > div:first-child > h2").innerHTML = months[time.getMonth()]+" "+time.getDate();
 
@@ -64,7 +71,6 @@ class Sysinfo {
             hours: 0,
             minutes: 0
         };
-
         uptime.days = Math.floor(uptime.raw/86400);
         uptime.raw -= uptime.days*86400;
         uptime.hours = Math.floor(uptime.raw/3600);
@@ -77,25 +83,27 @@ class Sysinfo {
         document.querySelector("#mod_sysinfo > div:nth-child(2) > h2").innerHTML = uptime.days + '<span style="opacity:0.5;">d</span>' + uptime.hours + '<span style="opacity:0.5;">:</span>' + uptime.minutes;
     }
     updateBattery() {
-        window.si.battery().then(bat => {
-            let indicator = document.querySelector("#mod_sysinfo > div:last-child > h2");
-            if (bat.hasBattery) {
-                if (bat.isCharging) {
-                    indicator.innerHTML = "CHARGE";
-                } else if (bat.acConnected) {
-                    indicator.innerHTML = "WIRED";
-                } else {
-                    indicator.innerHTML = bat.percent+"%";
-                }
+        window.si.battery().then(bat => { this._updateBattery(bat); });
+    }
+    _updateBattery(bat) {
+        let indicator = document.querySelector("#mod_sysinfo > div:last-child > h2");
+        if (bat.hasBattery) {
+            if (bat.isCharging) {
+                indicator.innerHTML = "CHARGE";
+            } else if (bat.acConnected) {
+                indicator.innerHTML = "WIRED";
             } else {
-                indicator.innerHTML = "ON";
+                indicator.innerHTML = bat.percent+"%";
             }
-        });
+        } else {
+            indicator.innerHTML = "ON";
+        }
     }
     destroy() {
         if (this.uptimeUpdater) clearInterval(this.uptimeUpdater);
         if (this.batteryUpdater) clearInterval(this.batteryUpdater);
         if (this._dateTimeout) clearTimeout(this._dateTimeout);
+        this._unsubs.forEach(fn => fn());
     }
 }
 
