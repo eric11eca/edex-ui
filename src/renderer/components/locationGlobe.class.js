@@ -74,15 +74,14 @@ class LocationGlobe {
             window.addEventListener("resize", this.resizeHandler);
 
             this.conns = [];
-            this.addConn = ip => {
-                let data = null;
+            this.addConn = async (ip) => {
+                let geo = null;
                 try {
-                    data = window.mods.netstat.geoLookup.get(ip);
+                    geo = await window.edex.geoip.lookup(ip);
                 } catch {
                     // do nothing
                 }
-                let geo = (data !== null ? data.location : {});
-                if (geo.latitude && geo.longitude) {
+                if (geo && geo.latitude && geo.longitude) {
                     const lat = Number(geo.latitude);
                     const lon = Number(geo.longitude);
                     window.mods.globe.conns.push({
@@ -130,10 +129,9 @@ class LocationGlobe {
         this.globe.addMarker(randomLat, randomLong, '');
         this.globe.addMarker(randomLat - 20, randomLong + 150, '', true);
     }
-    addTemporaryConnectedMarker(ip) {
-        let data = window.mods.netstat.geoLookup.get(ip);
-        let geo = (data !== null ? data.location : {});
-        if (geo.latitude && geo.longitude) {
+    async addTemporaryConnectedMarker(ip) {
+        let geo = await window.edex.geoip.lookup(ip);
+        if (geo && geo.latitude && geo.longitude) {
             const lat = Number(geo.latitude);
             const lon = Number(geo.longitude);
 

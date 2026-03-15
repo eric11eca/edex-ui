@@ -3,16 +3,13 @@ import { AttachAddon } from 'xterm-addon-attach';
 import { FitAddon } from 'xterm-addon-fit';
 import { LigaturesAddon } from 'xterm-addon-ligatures';
 import { WebglAddon } from 'xterm-addon-webgl';
-import { ipcRenderer } from 'electron';
-const remote = require('@electron/remote');
 import color from 'color';
-import { TerminalMessage, terminalChannel } from '../../shared/terminal-protocol.js';
+import { TerminalMessage } from '../../shared/terminal-protocol.js';
 
 class Terminal {
     constructor(opts) {
         if (!opts.parentId) throw "Missing options";
 
-        this.Ipc = ipcRenderer;
         this.port = opts.port || 3000;
         this.cwd = "";
         this.oncwdchange = () => {};
@@ -26,7 +23,7 @@ class Terminal {
             while (rows.length < 3) {
                 rows = "0"+rows;
             }
-            this.Ipc.send(terminalChannel(this.port), TerminalMessage.RESIZE, cols, rows);
+            window.edex.terminal.sendResize(this.port, cols, rows);
         };
 
         // Support for custom color filters on the terminal - see #483
@@ -151,8 +148,8 @@ class Terminal {
         document.querySelectorAll('.xterm-helper-textarea').forEach(textarea => textarea.setAttribute('readonly', 'readonly'));
         this.term.focus();
 
-        this.Ipc.send(terminalChannel(this.port), TerminalMessage.RENDERER_STARTUP);
-        this._ipcHandler = (e, ...args) => {
+        window.edex.terminal.sendStartup(this.port);
+        this._unsubTerminal = window.edex.terminal.onMessage(this.port, (...args) => {
             switch(args[0]) {
                 case TerminalMessage.NEW_CWD:
                     this.cwd = args[1];
@@ -170,8 +167,7 @@ class Terminal {
                 default:
                     return;
             }
-        };
-        this.Ipc.on(terminalChannel(this.port), this._ipcHandler);
+        });
         this.resendCWD = () => {
             this.oncwdchange(this.cwd || null);
         };
@@ -303,7 +299,7 @@ class Terminal {
                 this.clipboard.didCopy = true;
             },
             paste: () => {
-                this.write(remote.clipboard.readText());
+                this.write(window.edex.clipboard.readText());
                 this.clipboard.didCopy = false;
             },
             didCopy: false
@@ -317,10 +313,10 @@ class Terminal {
             this._fitDebounceTimer = null;
         }
 
-        // Remove IPC listener
-        if (this._ipcHandler) {
-            this.Ipc.removeListener(terminalChannel(this.port), this._ipcHandler);
-            this._ipcHandler = null;
+        // Remove terminal message listener
+        if (this._unsubTerminal) {
+            this._unsubTerminal();
+            this._unsubTerminal = null;
         }
 
         // Close WebSocket

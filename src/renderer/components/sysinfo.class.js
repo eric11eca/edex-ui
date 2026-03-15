@@ -1,11 +1,9 @@
-import os from 'node:os';
-
 class Sysinfo {
     constructor(parentId) {
         if (!parentId) throw "Missing parameters";
 
         let osName;
-        switch (os.platform()) {
+        switch (window.edex.platform) {
             case "darwin":
                 osName = "macOS";
                 break;
@@ -61,7 +59,7 @@ class Sysinfo {
     }
     updateUptime() {
         let uptime = {
-            raw: Math.floor(os.uptime()),
+            raw: Math.floor(window.edex.os.uptime()),
             days: 0,
             hours: 0,
             minutes: 0

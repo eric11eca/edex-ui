@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { Modal } from './modal.class.js';
 
 class FuzzyFinder {
@@ -126,7 +125,7 @@ class FuzzyFinder {
              return;
         }
 
-        let filePath = path.resolve(window.fsDisp.dirpath, file);
+        let filePath = window.edex.path.resolve(window.fsDisp.dirpath, file);
 
           window.term[window.currentTerm].write(`'${filePath}'`);
           this.disp.close();

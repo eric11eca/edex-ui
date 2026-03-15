@@ -1,71 +1,52 @@
-import https from 'node:https';
-import { ipcRenderer, shell } from 'electron';
-const remote = require('@electron/remote');
 import { Modal } from './modal.class.js';
 
 class UpdateChecker {
     constructor() {
-        let current = remote.app.getVersion();
+        let current = window.edex.app.getVersion();
 
         this._failed = false;
         this._willfail = false;
         this._fail = e => {
             this._failed = true;
-            ipcRenderer.send("log", "note", "UpdateChecker: Could not fetch latest release from GitHub's API.");
-            ipcRenderer.send("log", "debug", `Error: ${e}`);
+            window.edex.log.send("note", "UpdateChecker: Could not fetch latest release from GitHub's API.");
+            window.edex.log.send("debug", `Error: ${e}`);
         };
 
-        https.get({
+        window.edex.net.httpGet({
             protocol: "https:",
             host: "api.github.com",
             path: "/repos/GitSquared/edex-ui/releases/latest",
             headers: {
                 "User-Agent": "eDEX-UI UpdateChecker"
             }
-        }, res => {
-            switch(res.statusCode) {
-                case 200:
-                    break;
-                case 404:
-                    this._fail("Got 404 (Not Found) response from server");
-                    break;
-                default:
-                    this._willfail = true;
+        }).then(res => {
+            if (res.statusCode === 404) {
+                this._fail("Got 404 (Not Found) response from server");
+                return;
+            }
+            if (res.statusCode !== 200) {
+                this._fail(res.body);
+                return;
             }
 
-            let rawData = "";
-
-            res.on('data', chunk => {
-                rawData += chunk;
-            });
-
-            res.on('end', () => {
-                let d = rawData;
-                if (this._failed === true) {
-                    // Do nothing
-                } else if (this._willfail) {
-                    this._fail(d.toString());
+            try {
+                let release = JSON.parse(res.body);
+                if (release.tag_name.slice(1) === current) {
+                    window.edex.log.send("info", "UpdateChecker: Running latest version.");
+                } else if (Number(release.tag_name.slice(1).replace(/\./g, "")) < Number(current.replace("-pre", "").replace(/\./g, ""))) {
+                    window.edex.log.send("info", "UpdateChecker: Running an unreleased, development version.");
                 } else {
-                    try {
-                        let release = JSON.parse(d.toString());
-                        if (release.tag_name.slice(1) === current) {
-                            ipcRenderer.send("log", "info", "UpdateChecker: Running latest version.");
-                        } else if (Number(release.tag_name.slice(1).replace(/\./g, "")) < Number(current.replace("-pre", "").replace(/\./g, ""))) {
-                            ipcRenderer.send("log", "info", "UpdateChecker: Running an unreleased, development version.");
-                        } else {
-                            new Modal({
-                                type: "info",
-                                title: "New version available",
-                                message: `eDEX-UI <strong>${release.tag_name}</strong> is now available.<br/>Head over to <a href="#" onclick="require('electron').shell.openExternal('${release.html_url}')">github.com</a> to download the latest version.`
-                            });
-                            ipcRenderer.send("log", "info", `UpdateChecker: New version ${release.tag_name} available.`);
-                        }
-                    } catch(e) {
-                        this._fail(e);
-                    }
+                    new Modal({
+                        type: "info",
+                        title: "New version available",
+                        message: `eDEX-UI <strong>${release.tag_name}</strong> is now available.<br/>Head over to <a href="#" onclick="window.edex.shell.openExternal('${release.html_url}')">github.com</a> to download the latest version.`
+                    });
+                    window.edex.log.send("info", `UpdateChecker: New version ${release.tag_name} available.`);
                 }
-            });
-        }).on('error', e => {
+            } catch(e) {
+                this._fail(e);
+            }
+        }).catch(e => {
             this._fail(e);
         });
     }

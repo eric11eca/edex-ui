@@ -1,59 +1,53 @@
-import path from 'node:path';
 import { Howl, Howler } from 'howler';
-
-// Resolve the src/ directory at runtime (works in both dev and prod)
-const remote = require('@electron/remote');
-const srcDir = remote.app.isPackaged
-  ? path.join(process.resourcesPath, 'assets')
-  : path.resolve(remote.app.getAppPath(), 'src', 'assets');
 
 class AudioManager {
     constructor() {
-        const audioDir = path.join(srcDir, "audio");
+        const assetsPath = window.edex.app.getAssetsPath();
+        const audioDir = assetsPath + '/audio';
 
         if (window.settings.audio === true) {
             if(window.settings.disableFeedbackAudio === false) {
                 this.stdout = new Howl({
-                    src: [path.join(audioDir, "stdout.wav")],
+                    src: [window.edex.path.join(audioDir,"stdout.wav")],
                     volume: 0.4
                 });
                 this.stdin = new Howl({
-                    src: [path.join(audioDir, "stdin.wav")],
+                    src: [window.edex.path.join(audioDir,"stdin.wav")],
                     volume: 0.4
                 });
                 this.folder = new Howl({
-                    src: [path.join(audioDir, "folder.wav")]
+                    src: [window.edex.path.join(audioDir,"folder.wav")]
                 });
                 this.granted = new Howl({
-                    src: [path.join(audioDir, "granted.wav")]
+                    src: [window.edex.path.join(audioDir,"granted.wav")]
                 });
             }
             this.keyboard = new Howl({
-                src: [path.join(audioDir, "keyboard.wav")]
+                src: [window.edex.path.join(audioDir,"keyboard.wav")]
             });
             this.theme = new Howl({
-                src: [path.join(audioDir, "theme.wav")]
+                src: [window.edex.path.join(audioDir,"theme.wav")]
             });
             this.expand = new Howl({
-                src: [path.join(audioDir, "expand.wav")]
+                src: [window.edex.path.join(audioDir,"expand.wav")]
             });
             this.panels = new Howl({
-                src: [path.join(audioDir, "panels.wav")]
+                src: [window.edex.path.join(audioDir,"panels.wav")]
             });
             this.scan = new Howl({
-                src: [path.join(audioDir, "scan.wav")]
+                src: [window.edex.path.join(audioDir,"scan.wav")]
             });
             this.denied = new Howl({
-                src: [path.join(audioDir, "denied.wav")]
+                src: [window.edex.path.join(audioDir,"denied.wav")]
             });
             this.info = new Howl({
-                src: [path.join(audioDir, "info.wav")]
+                src: [window.edex.path.join(audioDir,"info.wav")]
             });
             this.alarm = new Howl({
-                src: [path.join(audioDir, "alarm.wav")]
+                src: [window.edex.path.join(audioDir,"alarm.wav")]
             });
             this.error = new Howl({
-                src: [path.join(audioDir, "error.wav")]
+                src: [window.edex.path.join(audioDir,"error.wav")]
             });
 
             Howler.volume(window.settings.audioVolume);

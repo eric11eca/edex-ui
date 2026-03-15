@@ -1,10 +1,9 @@
-import fs from 'node:fs';
-
 class Keyboard {
     constructor(opts) {
         if (!opts.layout || !opts.container) throw "Missing options";
 
-        const layout = JSON.parse(fs.readFileSync(opts.layout, {encoding: "utf-8"}));
+        // opts.layout can be either a parsed layout object or a layout name string
+        const layout = (typeof opts.layout === 'object') ? opts.layout : opts.layout;
         this.ctrlseq = ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""];
         this.container = document.getElementById(opts.container);
 

@@ -1,11 +1,3 @@
-import https from 'node:https';
-import net from 'node:net';
-import path from 'node:path';
-import geolite2 from 'geolite2-redist';
-import maxmind from 'maxmind';
-const remote = require('@electron/remote');
-import { ipcRenderer } from 'electron';
-
 class Netstat {
     constructor(parentId) {
         if (!parentId) throw "Missing parameters";
@@ -32,33 +24,22 @@ class Netstat {
         </div>`;
 
         this.offline = false;
-        this.lastconn = {finished: false};
         this.iface = null;
         this.failedAttempts = {};
         this.runsBeforeGeoIPUpdate = 0;
+        this.ipinfo = null;
 
-        this._httpsAgent = new https.Agent({
-            keepAlive: false,
-            maxSockets: 10
+        // Init GeoIP backend in main process
+        this._geoipReady = false;
+        window.edex.geoip.init().then(success => {
+            this._geoipReady = success;
         });
 
+        // Init updaters
         this.updateInfo();
         this.infoUpdater = setInterval(() => {
             this.updateInfo();
         }, 2000);
-
-        // Init GeoIP integrated backend
-        this.geoLookup = {
-            get: () => null
-        };
-        geolite2.downloadDbs(path.join(remote.app.getPath("userData"), "geoIPcache")).then(() => {
-           geolite2.open('GeoLite2-City', dbPath => {
-                return maxmind.open(dbPath);
-            }).catch(e => {throw e}).then(lookup => {
-                this.geoLookup = lookup;
-                this.lastconn.finished = true;
-            });
-        });
     }
     updateInfo() {
         window.si.networkInterfaces().then(async data => {
@@ -104,83 +85,55 @@ class Netstat {
             if (_net.ip4 === "127.0.0.1") {
                 offline = true;
             } else {
-                if (this.runsBeforeGeoIPUpdate === 0 && this.lastconn.finished) {
-                    this.lastconn = https.get({host: "myexternalip.com", port: 443, path: "/json", localAddress: _net.ip4, agent: this._httpsAgent}, res => {
-                        let rawData = "";
-                        res.on("data", chunk => {
-                            rawData += chunk;
+                if (this.runsBeforeGeoIPUpdate === 0 && this._geoipReady) {
+                    try {
+                        const res = await window.edex.net.httpGet({
+                            host: "myexternalip.com",
+                            port: 443,
+                            path: "/json",
                         });
-                        res.on("end", () => {
-                            try {
-                                let d = JSON.parse(rawData);
-                                this.ipinfo = {
-                                    ip: d.ip,
-                                    geo: this.geoLookup.get(d.ip).location
-                                };
+                        const d = JSON.parse(res.body);
+                        const geo = await window.edex.geoip.lookup(d.ip);
+                        this.ipinfo = {
+                            ip: d.ip,
+                            geo: geo,
+                        };
 
-                                let ip = this.ipinfo.ip;
-                                document.querySelector("#mod_netstat_innercontainer > div:nth-child(2) > h2").innerHTML = window._escapeHtml(ip);
+                        let ip = this.ipinfo.ip;
+                        document.querySelector("#mod_netstat_innercontainer > div:nth-child(2) > h2").innerHTML = window._escapeHtml(ip);
 
-                                this.runsBeforeGeoIPUpdate = 10;
-                            } catch(e) {
-                                this.failedAttempts[e] = (this.failedAttempts[e] || 0) + 1;
-                                if (this.failedAttempts[e] > 2) return false;
-                                console.warn(e);
-                                console.info(rawData.toString());
-                                ipcRenderer.send("log", "note", "NetStat: Error parsing data from myexternalip.com");
-                                ipcRenderer.send("log", "debug", `Error: ${e}`);
-                            }
-                        });
-                    }).on("error", e => {
-                        // Drop it
-                    });
+                        this.runsBeforeGeoIPUpdate = 10;
+                    } catch(e) {
+                        this.failedAttempts[e] = (this.failedAttempts[e] || 0) + 1;
+                        if (this.failedAttempts[e] > 2) return false;
+                        console.warn(e);
+                        window.edex.log.send("note", "NetStat: Error parsing data from myexternalip.com");
+                        window.edex.log.send("debug", `Error: ${e}`);
+                    }
                 } else if (this.runsBeforeGeoIPUpdate !== 0) {
                     this.runsBeforeGeoIPUpdate = this.runsBeforeGeoIPUpdate - 1;
                 }
 
-                let p = await this.ping(window.settings.pingAddr || "1.1.1.1", 80, _net.ip4).catch(() => { offline = true; });
+                try {
+                    let p = await window.edex.net.tcpPing(window.settings.pingAddr || "1.1.1.1", 80, _net.ip4);
+                    this.offline = false;
+                    document.querySelector("#mod_netstat_innercontainer > div:first-child > h2").innerHTML = "ONLINE";
+                    document.querySelector("#mod_netstat_innercontainer > div:nth-child(3) > h2").innerHTML = Math.round(p)+"ms";
+                } catch(e) {
+                    offline = true;
+                }
 
                 this.offline = offline;
                 if (offline) {
                     document.querySelector("#mod_netstat_innercontainer > div:first-child > h2").innerHTML = "OFFLINE";
                     document.querySelector("#mod_netstat_innercontainer > div:nth-child(2) > h2").innerHTML = "--.--.--.--";
                     document.querySelector("#mod_netstat_innercontainer > div:nth-child(3) > h2").innerHTML = "--ms";
-                } else {
-                    document.querySelector("#mod_netstat_innercontainer > div:first-child > h2").innerHTML = "ONLINE";
-                    document.querySelector("#mod_netstat_innercontainer > div:nth-child(3) > h2").innerHTML = Math.round(p)+"ms";
                 }
             }
         });
     }
-    ping(target, port, local) {
-        return new Promise((resolve, reject) => {
-            let s = new net.Socket();
-            let start = process.hrtime();
-
-            s.connect({
-                port,
-                host: target,
-                localAddress: local,
-                family: 4
-            }, () => {
-                let time_arr = process.hrtime(start);
-                let time = (time_arr[0] * 1e9 + time_arr[1]) / 1e6;
-                resolve(time);
-                s.destroy();
-            });
-            s.on('error', e => {
-                s.destroy();
-                reject(e);
-            });
-            s.setTimeout(1900, function() {
-                s.destroy();
-                reject(new Error("Socket timeout"));
-            });
-        });
-    }
     destroy() {
         if (this.infoUpdater) clearInterval(this.infoUpdater);
-        if (this._httpsAgent) this._httpsAgent.destroy();
     }
 }
 
