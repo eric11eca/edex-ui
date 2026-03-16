@@ -553,10 +553,7 @@ class FilesystemDisplay {
         };
 
         if (window.performance.navigation.type === 0) {
-            const initialCwd = window.term[window.currentTerm].cwd || window.settings.cwd;
-            this.readFS(initialCwd).catch(() => {
-                // Configured CWD may not exist; fallback handled by setFailedState
-            });
+            this.readFS(window.term[window.currentTerm].cwd || window.settings.cwd);
         }
 
         this.openFile = (name, filePath, type) => {

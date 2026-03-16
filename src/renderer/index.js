@@ -162,8 +162,13 @@ window._loadTheme = theme => {
         document.querySelector("style.theming").remove();
     }
 
-    // Load fonts
-    const fontPath = (name) => fontsDir + '/' + name.toLowerCase().replace(/ /g, '_') + '.woff2';
+    // Load fonts — use file:// URLs so fonts load correctly when served via Vite dev server
+    const fontPath = (name) => {
+        const p = fontsDir + '/' + name.toLowerCase().replace(/ /g, '_') + '.woff2';
+        // On all platforms, ensure file:// prefix for local font loading
+        if (p.startsWith('/')) return 'file://' + p;
+        return 'file:///' + p.replace(/\\/g, '/'); // Windows
+    };
     let mainFont = new FontFace(theme.cssvars.font_main, `url("${fontPath(theme.cssvars.font_main).replace(/\\/g, '/')}")`);
     let lightFont = new FontFace(theme.cssvars.font_main_light, `url("${fontPath(theme.cssvars.font_main_light).replace(/\\/g, '/')}")`);
     let termFont = new FontFace(theme.terminal.fontFamily, `url("${fontPath(theme.terminal.fontFamily).replace(/\\/g, '/')}")`);

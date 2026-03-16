@@ -137,6 +137,10 @@ function registerConfigHandlers() {
         Object.assign(settings, JSON.parse(fs.readFileSync(devConfigPath, 'utf-8')));
       } catch (e) { /* ignore parse errors */ }
     }
+    // Validate cwd exists, fall back to home directory
+    if (settings.cwd && !fs.existsSync(settings.cwd)) {
+      settings.cwd = app.getPath('home');
+    }
     return settings;
   });
   ipcMain.handle('config:readShortcuts', () => {
