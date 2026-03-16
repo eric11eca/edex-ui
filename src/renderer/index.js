@@ -143,12 +143,18 @@ const store = new EdexStore({
     passwordMode: false,
 });
 
-// SI proxy: components use window.si (backed by preload bridge)
-// The SystemMonitorScheduler also writes results to store.systemData.*
-window.si = window.edex.si;
+// SI proxy: wrap preload's query function in a Proxy for ergonomic si.method() calls.
+// Proxy can't cross contextBridge, so we create it here in the renderer context.
+const siProxy = new Proxy({}, {
+    get: (target, prop) => {
+        if (prop === 'then' || prop === 'toJSON' || typeof prop === 'symbol') return undefined;
+        return (...args) => window.edex.si.query(prop, ...args);
+    },
+});
+window.si = siProxy;
 
 // Start coordinated system monitor scheduler
-const scheduler = new SystemMonitorScheduler(store, window.edex.si);
+const scheduler = new SystemMonitorScheduler(store, siProxy);
 
 // Load UI theme
 window._loadTheme = theme => {

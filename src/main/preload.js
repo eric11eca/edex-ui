@@ -80,20 +80,19 @@ contextBridge.exposeInMainWorld('edex', {
 
   // --- System Information (proxied through multithread workers) ---
   // Uses the existing systeminformation-call/reply IPC pattern from multithread.js
-  si: new Proxy({}, {
-    get: (target, prop) => {
-      if (prop === 'then' || prop === 'toJSON' || typeof prop === 'symbol') return undefined;
-      return (...args) => {
-        return new Promise((resolve) => {
-          const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-          ipcRenderer.once('systeminformation-reply-' + id, (e, res) => {
-            resolve(res);
-          });
-          ipcRenderer.send('systeminformation-call', prop, id, ...args);
+  // Note: Proxy can't cross contextBridge, so we expose a plain query function.
+  // The renderer wraps this in a Proxy for ergonomic si.method() calls.
+  si: {
+    query: (method, ...args) => {
+      return new Promise((resolve) => {
+        const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        ipcRenderer.once('systeminformation-reply-' + id, (e, res) => {
+          resolve(res);
         });
-      };
+        ipcRenderer.send('systeminformation-call', method, id, ...args);
+      });
     },
-  }),
+  },
 
   // --- Logging ---
   log: {

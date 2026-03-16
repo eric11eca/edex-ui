@@ -67,6 +67,10 @@ export default defineConfig({
       },
     ]),
   ],
+  define: {
+    // xterm-addon-ligatures expects Node.js `global` variable
+    global: 'globalThis',
+  },
   build: {
     outDir: path.resolve(__dirname, 'dist'),
     emptyOutDir: true,
