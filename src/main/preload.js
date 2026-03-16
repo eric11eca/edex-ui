@@ -118,6 +118,13 @@ contextBridge.exposeInMainWorld('edex', {
     listKeyboards: () => ipcRenderer.invoke('config:listKeyboards'),
   },
 
+  // --- Plugins ---
+  plugins: {
+    list: () => ipcRenderer.invoke('plugins:list'),
+    read: (name) => ipcRenderer.invoke('plugins:read', name),
+    getDir: () => ipcRenderer.invoke('plugins:getDir'),
+  },
+
   // --- Filesystem ---
   fs: {
     readdir: (dir) => ipcRenderer.invoke('fs:readdir', dir),

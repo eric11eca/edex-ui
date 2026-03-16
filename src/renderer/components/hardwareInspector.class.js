@@ -1,11 +1,10 @@
-class HardwareInspector {
-    constructor(parentId, { store } = {}) {
-        if (!parentId) throw "Missing parameters";
+import { MonitorPanel } from './monitor-panel.js';
 
-        this._store = store;
-        this._unsubs = [];
+class HardwareInspector extends MonitorPanel {
+    static id = 'mod_hardwareInspector';
+    static title = 'Hardware Inspector';
 
-        this.parent = document.getElementById(parentId);
+    _createDOM() {
         this._element = document.createElement("div");
         this._element.setAttribute("id", "mod_hardwareInspector");
         this._element.innerHTML = `<div id="mod_hardwareInspector_inner">
@@ -22,44 +21,47 @@ class HardwareInspector {
                 <h2 id="mod_hardwareInspector_chassis" >NONE</h2>
             </div>
         </div>`;
-
         this.parent.append(this._element);
 
-        if (store) {
-            // Subscribe to slow tier data
-            this._unsubs.push(store.on('systemData.system', () => this._updateFromStore()));
-            this._unsubs.push(store.on('systemData.chassis', () => this._updateFromStore()));
-        } else {
-            this.updateInfo();
-            this.infoUpdater = setInterval(() => { this.updateInfo(); }, 20000);
-        }
+        this._mfgEl = document.getElementById("mod_hardwareInspector_manufacturer");
+        this._modelEl = document.getElementById("mod_hardwareInspector_model");
+        this._chassisEl = document.getElementById("mod_hardwareInspector_chassis");
     }
+
+    _subscribe() {
+        this._unsubs.push(this._store.on('systemData.system', () => this._updateFromStore()));
+        this._unsubs.push(this._store.on('systemData.chassis', () => this._updateFromStore()));
+    }
+
+    _startPolling() {
+        this.updateInfo();
+        this._setInterval(() => { this.updateInfo(); }, 20000);
+    }
+
     _updateFromStore() {
         const d = this._store.get('systemData.system');
         const e = this._store.get('systemData.chassis');
         if (!d || !e) return;
-        document.getElementById("mod_hardwareInspector_manufacturer").innerText = this._trimDataString(d.manufacturer);
-        document.getElementById("mod_hardwareInspector_model").innerText = this._trimDataString(d.model, d.manufacturer, e.type);
-        document.getElementById("mod_hardwareInspector_chassis").innerText = e.type;
+        this._mfgEl.textContent = this._trimDataString(d.manufacturer);
+        this._modelEl.textContent = this._trimDataString(d.model, d.manufacturer, e.type);
+        this._chassisEl.textContent = e.type;
     }
+
     updateInfo() {
         window.si.system().then(d => {
             window.si.chassis().then(e => {
-                document.getElementById("mod_hardwareInspector_manufacturer").innerText = this._trimDataString(d.manufacturer);
-                document.getElementById("mod_hardwareInspector_model").innerText = this._trimDataString(d.model, d.manufacturer, e.type);
-                document.getElementById("mod_hardwareInspector_chassis").innerText = e.type;
+                this._mfgEl.textContent = this._trimDataString(d.manufacturer);
+                this._modelEl.textContent = this._trimDataString(d.model, d.manufacturer, e.type);
+                this._chassisEl.textContent = e.type;
             });
         });
     }
+
     _trimDataString(str, ...filters) {
         return str.trim().split(" ").filter(word => {
             if (typeof filters !== "object") return true;
             return !filters.includes(word);
         }).slice(0, 2).join(" ");
-    }
-    destroy() {
-        if (this.infoUpdater) clearInterval(this.infoUpdater);
-        this._unsubs.forEach(fn => fn());
     }
 }
 

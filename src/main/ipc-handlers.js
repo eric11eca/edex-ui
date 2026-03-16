@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
 import net from 'node:net';
+import { migrateSettings } from './settings-migration.js';
 
 // Will be set by init()
 let win = null;
@@ -14,6 +15,7 @@ let lastWindowStateFile = null;
 let themesDir = null;
 let kblayoutsDir = null;
 let fontsDir = null;
+let pluginsDir = null;
 
 // GeoIP state
 let geoLookup = null;
@@ -35,10 +37,17 @@ export function init(options) {
   themesDir = options.themesDir;
   kblayoutsDir = options.kblayoutsDir;
   fontsDir = options.fontsDir;
+  pluginsDir = options.pluginsDir || path.join(app.getPath('userData'), 'plugins');
+
+  // Ensure plugins directory exists
+  if (!fs.existsSync(pluginsDir)) {
+    fs.mkdirSync(pluginsDir, { recursive: true });
+  }
 
   registerAppHandlers();
   registerWindowHandlers();
   registerConfigHandlers();
+  registerPluginHandlers();
   registerFsHandlers();
   registerHotswitchHandlers();
   registerShellHandlers();
@@ -130,7 +139,16 @@ function registerWindowHandlers() {
 // --- Config handlers ---
 function registerConfigHandlers() {
   ipcMain.handle('config:readSettings', () => {
-    const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
+    let settings = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
+
+    // Run settings migrations
+    const { settings: migrated, migrated: didMigrate } = migrateSettings(settings);
+    settings = migrated;
+    if (didMigrate) {
+      // Write migrated settings back to disk
+      fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 4));
+    }
+
     // Merge dev overrides in dev mode
     if (devConfigPath && fs.existsSync(devConfigPath)) {
       try {
@@ -187,6 +205,27 @@ function registerConfigHandlers() {
     return fs.readdirSync(kblayoutsDir)
       .filter(f => f.endsWith('.json'))
       .map(f => f.replace('.json', ''));
+  });
+}
+
+// --- Plugin handlers ---
+function registerPluginHandlers() {
+  ipcMain.handle('plugins:list', () => {
+    if (!fs.existsSync(pluginsDir)) return [];
+    return fs.readdirSync(pluginsDir)
+      .filter(f => f.endsWith('.js'))
+      .map(f => f.replace('.js', ''));
+  });
+
+  ipcMain.handle('plugins:read', (e, name) => {
+    const safeName = path.basename(name).replace(/[^a-zA-Z0-9_\-\.]/g, '');
+    const pluginPath = path.join(pluginsDir, safeName + '.js');
+    if (!fs.existsSync(pluginPath)) throw new Error(`Plugin not found: ${safeName}`);
+    return fs.readFileSync(pluginPath, 'utf-8');
+  });
+
+  ipcMain.handle('plugins:getDir', () => {
+    return pluginsDir;
   });
 }
 

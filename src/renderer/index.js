@@ -45,6 +45,7 @@ import { FuzzyFinder } from './components/fuzzyFinder.class.js';
 import { AudioManager } from './components/audiofx.class.js';
 import { EdexStore } from './store/index.js';
 import { SystemMonitorScheduler } from './store/system-monitor.js';
+import { loadPlugins } from './plugins/loader.js';
 
 // Modal is still needed on window for modal button action strings
 window.Modal = Modal;
@@ -445,6 +446,14 @@ async function initUI() {
     window.mods.globe = new LocationGlobe("mod_column_right", { store });
     window.mods.conninfo = new Conninfo("mod_column_right", { store });
 
+    // Load user plugins from userData/plugins/
+    try {
+        const plugins = await loadPlugins(store);
+        Object.assign(window.mods, plugins);
+    } catch (e) {
+        console.warn('Plugin loading failed:', e);
+    }
+
     // Fade-in animations
     document.querySelectorAll(".mod_column").forEach(e => {
         e.setAttribute("class", "mod_column activated");
@@ -732,7 +741,9 @@ window.writeSettingsFile = () => {
         hideDotfiles: (document.getElementById("settingsEditor-hideDotfiles").value === "true"),
         fsListView: (document.getElementById("settingsEditor-fsListView").value === "true"),
         experimentalGlobeFeatures: (document.getElementById("settingsEditor-experimentalGlobeFeatures").value === "true"),
-        experimentalFeatures: (document.getElementById("settingsEditor-experimentalFeatures").value === "true")
+        experimentalFeatures: (document.getElementById("settingsEditor-experimentalFeatures").value === "true"),
+        scrollback: window.settings.scrollback || 10000,
+        _version: window.settings._version || 2
     };
 
     Object.keys(window.settings).forEach(key => {

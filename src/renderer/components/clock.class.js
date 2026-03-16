@@ -1,40 +1,47 @@
-class Clock {
+import { MonitorPanel } from './monitor-panel.js';
+
+class Clock extends MonitorPanel {
+    static id = 'mod_clock';
+    static title = 'Clock';
+
     constructor(parentId, { store } = {}) {
-        if (!parentId) throw "Missing parameters";
+        super(parentId, { store });
 
         const settings = store ? store.get('settings') : window.settings;
         this.twelveHours = (settings.clockHours === 12);
 
-        this.parent = document.getElementById(parentId);
-        this.parent.innerHTML += `<div id="mod_clock" class="${(this.twelveHours) ? "mod_clock_twelve" : ""}">
-            <h1 id="mod_clock_text"></h1>
-        </div>`;
+        if (this.twelveHours) {
+            this._element.classList.add("mod_clock_twelve");
+            this._ampmSpan = document.createElement("span");
+            this._ampmSpan.textContent = "";
+            this._clockText.appendChild(this._ampmSpan);
+        }
 
-        // Build clock spans once and cache references
-        const clockEl = document.getElementById("mod_clock_text");
+        this._lastDigits = "";
+        this.updateClock();
+        this._setInterval(() => this.updateClock(), 1000);
+    }
+
+    _createDOM() {
+        this._element = document.createElement("div");
+        this._element.setAttribute("id", "mod_clock");
+        const h1 = document.createElement("h1");
+        h1.setAttribute("id", "mod_clock_text");
+        this._element.appendChild(h1);
+        this.parent.append(this._element);
+
+        this._clockText = h1;
         this._spans = [];
-        // HH:MM:SS = 8 characters, each gets a span or em
         for (let i = 0; i < 8; i++) {
             const el = (i === 2 || i === 5)
                 ? document.createElement("em")
                 : document.createElement("span");
             el.textContent = (i === 2 || i === 5) ? ":" : "?";
-            clockEl.appendChild(el);
+            h1.appendChild(el);
             this._spans.push(el);
         }
-        if (this.twelveHours) {
-            this._ampmSpan = document.createElement("span");
-            this._ampmSpan.textContent = "";
-            clockEl.appendChild(this._ampmSpan);
-        }
-
-        this._lastDigits = "";
-
-        this.updateClock();
-        this.updater = setInterval(() => {
-            this.updateClock();
-        }, 1000);
     }
+
     updateClock() {
         let time = new Date();
         let h = time.getHours();
@@ -52,7 +59,6 @@ class Clock {
 
         const digits = `${h < 10 ? "0" : ""}${h}:${m < 10 ? "0" : ""}${m}:${s < 10 ? "0" : ""}${s}`;
 
-        // Only update spans whose character changed
         if (digits !== this._lastDigits) {
             for (let i = 0; i < 8; i++) {
                 if (!this._lastDigits || digits[i] !== this._lastDigits[i]) {
@@ -61,9 +67,6 @@ class Clock {
             }
             this._lastDigits = digits;
         }
-    }
-    destroy() {
-        if (this.updater) clearInterval(this.updater);
     }
 }
 
