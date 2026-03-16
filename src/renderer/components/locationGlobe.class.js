@@ -129,6 +129,12 @@ class LocationGlobe {
                 this._unsubs.push(store.on('systemData.networkConnections', (conns) => {
                     if (conns) this._handleConnectionsData(conns);
                 }));
+                // Subscribe to IP detection events from terminal (experimentalGlobeFeatures)
+                this._unsubs.push(store.on('_events.globeIp', (data) => {
+                    if (data && data.ip && this.globe) {
+                        this.addTemporaryConnectedMarker(data.ip);
+                    }
+                }));
                 // Initial update
                 this.updateLoc();
             }, 4000);

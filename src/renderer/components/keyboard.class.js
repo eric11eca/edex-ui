@@ -2,6 +2,8 @@ class Keyboard {
     constructor(opts) {
         if (!opts.layout || !opts.container) throw "Missing options";
 
+        this._store = opts.store || null;
+
         // opts.layout can be either a parsed layout object or a layout name string
         const layout = (typeof opts.layout === 'object') ? opts.layout : opts.layout;
         this.ctrlseq = ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""];
@@ -25,6 +27,7 @@ class Keyboard {
         this.container.dataset.passwordMode = false;
 
         // Build arrays for enabling keyboard shortcuts
+        const shortcuts = this._store ? this._store.get('shortcuts') : window.shortcuts;
         this._shortcuts = {
             CtrlAltShift: [],
             CtrlAlt: [],
@@ -34,7 +37,7 @@ class Keyboard {
             Alt: [],
             Shift: []
         };
-        window.shortcuts.forEach(scut => {
+        shortcuts.forEach(scut => {
             let cut = Object.assign({}, scut);
             let mods = cut.trigger.split("+");
             cut.trigger = mods.pop();
@@ -562,6 +565,7 @@ class Keyboard {
         (d === "true") ? d = "false" : d = "true";
         this.container.dataset.passwordMode = d;
         window.passwordMode = d;
+        if (this._store) this._store.set('passwordMode', d);
         return d;
     }
     addCircum(char) {

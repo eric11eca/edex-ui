@@ -10,9 +10,14 @@ class Terminal {
     constructor(opts) {
         if (!opts.parentId) throw "Missing options";
 
+        this._store = opts.store || null;
         this.port = opts.port || 3000;
         this.cwd = "";
         this.oncwdchange = () => {};
+
+        // Read theme/settings from store or window
+        const theme = this._store ? this._store.get('theme') : window.theme;
+        const settings = this._store ? this._store.get('settings') : window.settings;
 
         this._sendSizeToServer = () => {
             let cols = this.term.cols.toString();
@@ -30,8 +35,8 @@ class Terminal {
         let doCustomFilter = (window.isTermFilterValidated) ? true : false;
 
         // Parse & validate color filter
-        if (window.isTermFilterValidated !== true && typeof window.theme.terminal.colorFilter === "object" && window.theme.terminal.colorFilter.length > 0) {
-            doCustomFilter = window.theme.terminal.colorFilter.every((step, i, a) => {
+        if (window.isTermFilterValidated !== true && typeof theme.terminal.colorFilter === "object" && theme.terminal.colorFilter.length > 0) {
+            doCustomFilter = theme.terminal.colorFilter.every((step, i, a) => {
                 let func = step.slice(0, step.indexOf("("));
 
                 switch(func) {
@@ -78,11 +83,11 @@ class Terminal {
                 let newColor = color(base);
                 target = color(target);
 
-                for (let i = 0; i < window.theme.terminal.colorFilter.length; i++) {
-                    if (window.theme.terminal.colorFilter[i].func === "mix") {
-                        newColor = newColor[window.theme.terminal.colorFilter[i].func](target, ...window.theme.terminal.colorFilter[i].arg);
+                for (let i = 0; i < theme.terminal.colorFilter.length; i++) {
+                    if (theme.terminal.colorFilter[i].func === "mix") {
+                        newColor = newColor[theme.terminal.colorFilter[i].func](target, ...theme.terminal.colorFilter[i].arg);
                     } else {
-                        newColor = newColor[window.theme.terminal.colorFilter[i].func](...window.theme.terminal.colorFilter[i].arg);
+                        newColor = newColor[theme.terminal.colorFilter[i].func](...theme.terminal.colorFilter[i].arg);
                     }
                 }
 
@@ -94,44 +99,44 @@ class Terminal {
             };
         }
 
-        let themeColor = `rgb(${window.theme.r}, ${window.theme.g}, ${window.theme.b})`;
+        let themeColor = `rgb(${theme.r}, ${theme.g}, ${theme.b})`;
 
         this.term = new XTerm({
             cols: 80,
             rows: 24,
-            cursorBlink: window.theme.terminal.cursorBlink || true,
-            cursorStyle: window.theme.terminal.cursorStyle || "block",
-            allowTransparency: window.theme.terminal.allowTransparency || false,
-            fontFamily: window.theme.terminal.fontFamily || "Fira Mono",
-            fontSize: window.theme.terminal.fontSize || window.settings.termFontSize || 15,
-            fontWeight: window.theme.terminal.fontWeight || "normal",
-            fontWeightBold: window.theme.terminal.fontWeightBold || "bold",
-            letterSpacing: window.theme.terminal.letterSpacing || 0,
-            lineHeight: window.theme.terminal.lineHeight || 1,
+            cursorBlink: theme.terminal.cursorBlink || true,
+            cursorStyle: theme.terminal.cursorStyle || "block",
+            allowTransparency: theme.terminal.allowTransparency || false,
+            fontFamily: theme.terminal.fontFamily || "Fira Mono",
+            fontSize: theme.terminal.fontSize || settings.termFontSize || 15,
+            fontWeight: theme.terminal.fontWeight || "normal",
+            fontWeightBold: theme.terminal.fontWeightBold || "bold",
+            letterSpacing: theme.terminal.letterSpacing || 0,
+            lineHeight: theme.terminal.lineHeight || 1,
             scrollback: 1500,
             bellStyle: "none",
             theme: {
-                foreground: window.theme.terminal.foreground,
-                background: window.theme.terminal.background,
-                cursor: window.theme.terminal.cursor,
-                cursorAccent: window.theme.terminal.cursorAccent,
-                selection: window.theme.terminal.selection,
-                black: window.theme.colors.black || colorify("#2e3436", themeColor),
-                red: window.theme.colors.red || colorify("#cc0000", themeColor),
-                green: window.theme.colors.green || colorify("#4e9a06", themeColor),
-                yellow: window.theme.colors.yellow || colorify("#c4a000", themeColor),
-                blue: window.theme.colors.blue || colorify("#3465a4", themeColor),
-                magenta: window.theme.colors.magenta || colorify("#75507b", themeColor),
-                cyan: window.theme.colors.cyan || colorify("#06989a", themeColor),
-                white: window.theme.colors.white || colorify("#d3d7cf", themeColor),
-                brightBlack: window.theme.colors.brightBlack || colorify("#555753", themeColor),
-                brightRed: window.theme.colors.brightRed || colorify("#ef2929", themeColor),
-                brightGreen: window.theme.colors.brightGreen || colorify("#8ae234", themeColor),
-                brightYellow: window.theme.colors.brightYellow || colorify("#fce94f", themeColor),
-                brightBlue: window.theme.colors.brightBlue || colorify("#729fcf", themeColor),
-                brightMagenta: window.theme.colors.brightMagenta || colorify("#ad7fa8", themeColor),
-                brightCyan: window.theme.colors.brightCyan || colorify("#34e2e2", themeColor),
-                brightWhite: window.theme.colors.brightWhite || colorify("#eeeeec", themeColor)
+                foreground: theme.terminal.foreground,
+                background: theme.terminal.background,
+                cursor: theme.terminal.cursor,
+                cursorAccent: theme.terminal.cursorAccent,
+                selection: theme.terminal.selection,
+                black: theme.colors.black || colorify("#2e3436", themeColor),
+                red: theme.colors.red || colorify("#cc0000", themeColor),
+                green: theme.colors.green || colorify("#4e9a06", themeColor),
+                yellow: theme.colors.yellow || colorify("#c4a000", themeColor),
+                blue: theme.colors.blue || colorify("#3465a4", themeColor),
+                magenta: theme.colors.magenta || colorify("#75507b", themeColor),
+                cyan: theme.colors.cyan || colorify("#06989a", themeColor),
+                white: theme.colors.white || colorify("#d3d7cf", themeColor),
+                brightBlack: theme.colors.brightBlack || colorify("#555753", themeColor),
+                brightRed: theme.colors.brightRed || colorify("#ef2929", themeColor),
+                brightGreen: theme.colors.brightGreen || colorify("#8ae234", themeColor),
+                brightYellow: theme.colors.brightYellow || colorify("#fce94f", themeColor),
+                brightBlue: theme.colors.brightBlue || colorify("#729fcf", themeColor),
+                brightMagenta: theme.colors.brightMagenta || colorify("#ad7fa8", themeColor),
+                brightCyan: theme.colors.brightCyan || colorify("#34e2e2", themeColor),
+                brightWhite: theme.colors.brightWhite || colorify("#eeeeec", themeColor)
             }
         });
         let fitAddon = new FitAddon();
@@ -140,8 +145,9 @@ class Terminal {
         this.term.loadAddon(new WebglAddon());
         let ligaturesAddon = new LigaturesAddon();
         this.term.loadAddon(ligaturesAddon);
+        const keydownHandler = opts.keydownHandler || (e => window.keyboard.keydownHandler(e));
         this.term.attachCustomKeyEventHandler(e => {
-            window.keyboard.keydownHandler(e);
+            keydownHandler(e);
             return true;
         });
         // Prevent soft-keyboard on touch devices #733
@@ -203,19 +209,25 @@ class Terminal {
             let d = Date.now();
 
             if (d - this.lastSoundFX > 30) {
-                if(window.passwordMode == "false")
+                let pm = this._store ? this._store.get('passwordMode') : window.passwordMode;
+                if(pm == "false" || pm === false)
                     window.audioManager.stdout.play();
                 this.lastSoundFX = d;
             }
             this._debouncedFit();
 
             // See #397
-            if (!window.settings.experimentalGlobeFeatures) return;
+            if (!settings.experimentalGlobeFeatures) return;
             let ips = e.data.match(/((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g);
             if (ips !== null && ips.length >= 1) {
                 ips = ips.filter((val, index, self) => { return self.indexOf(val) === index; });
                 ips.forEach(ip => {
-                    window.mods.globe.addTemporaryConnectedMarker(ip);
+                    if (this._store) {
+                        // Emit via store so globe can subscribe without direct coupling
+                        this._store.set('_events.globeIp', { ip, time: d });
+                    } else {
+                        window.mods.globe.addTemporaryConnectedMarker(ip);
+                    }
                 });
             }
         });
@@ -244,7 +256,7 @@ class Terminal {
         });
 
         document.querySelector(".xterm-helper-textarea").addEventListener("keydown", e => {
-            if (e.key === "F11" && window.settings.allowWindowed) {
+            if (e.key === "F11" && settings.allowWindowed) {
                 e.preventDefault();
                 window.toggleFullScreen();
             }
@@ -268,7 +280,7 @@ class Terminal {
             if (d === 100) { y = 1; x = 3;}
             if (d === 256) x = 2;
 
-            if (window.settings.termFontSize < 15) y = y - 1;
+            if (settings.termFontSize < 15) y = y - 1;
 
             cols = cols+x;
             rows = rows+y;

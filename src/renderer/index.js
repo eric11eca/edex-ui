@@ -399,7 +399,8 @@ async function initUI() {
     const kbLayout = await window.edex.config.readKeyboardLayout(window.settings.keyboard);
     window.keyboard = new Keyboard({
         layout: kbLayout,
-        container: "keyboard"
+        container: "keyboard",
+        store
     });
 
     await window._delay(10);
@@ -487,7 +488,8 @@ async function initUI() {
     window.term = {
         0: new Terminal({
             parentId: "terminal0",
-            port: window.settings.port || 3000
+            port: window.settings.port || 3000,
+            store
         })
     };
     window.currentTerm = 0;
@@ -500,7 +502,7 @@ async function initUI() {
     window.term[0].term.writeln("\x1b[1m"+`Welcome to eDEX-UI v${window.edex.app.getVersion()} - Electron v${window.edex.electronVersion}`+"\x1b[0m");
 
     await window._delay(100);
-    window.fsDisp = new FilesystemDisplay({ parentId: "filesystem" });
+    window.fsDisp = new FilesystemDisplay({ parentId: "filesystem", store });
 
     await window._delay(200);
     document.getElementById("filesystem").setAttribute("style", "opacity: 1;");
@@ -549,7 +551,8 @@ window.remakeKeyboard = async (layout) => {
     const kbLayout = await window.edex.config.readKeyboardLayout(layout);
     window.keyboard = new Keyboard({
         layout: kbLayout,
-        container: "keyboard"
+        container: "keyboard",
+        store
     });
     window.edex.hotswitch.setKbOverride(layout);
 };
@@ -583,7 +586,8 @@ window.focusShellTab = number => {
                 let port = result.port;
                 window.term[number] = new Terminal({
                     parentId: "terminal"+number,
-                    port
+                    port,
+                    store
                 });
                 window.term[number].onclose = e => {
                     delete window.term[number].onprocesschange;

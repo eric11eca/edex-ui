@@ -13,9 +13,12 @@ class FilesystemDisplay {
     constructor(opts) {
         if (!opts.parentId) throw "Missing options";
 
+        this._store = opts.store || null;
+        this._unsubs = [];
         this.cwd = [];
         this.cwd_path = null;
-        this.iconcolor = `rgb(${window.theme.r}, ${window.theme.g}, ${window.theme.b})`;
+        const theme = this._store ? this._store.get('theme') : window.theme;
+        this.iconcolor = `rgb(${theme.r}, ${theme.g}, ${theme.b})`;
         this._formatBytes = (a,b) => {if(0==a)return"0 Bytes";var c=1024,d=b||2,e=["Bytes","KB","MB","GB","TB","PB","EB","ZB","YB"],f=Math.floor(Math.log(a)/Math.log(c));return parseFloat((a/Math.pow(c,f)).toFixed(d))+" "+e[f]};
         this.fileIconsMatcher = fileIconsMatcher;
         this.icons = fileIcons;
@@ -28,7 +31,7 @@ class FilesystemDisplay {
             themesDir: {
                 width: 24,
                 height: 24,
-                svg: `<path d="m9.9994 3.9981h-6c-1.105 0-1.99 0.896-1.99 2l-0.01 12c0 1.104 0.895 2 2 2h16c1.104 0 2-0.896 2-2v-9.9999c0-1.104-0.896-2-2-2h-8l-1.9996-2z" stroke-width=".2"/><path stroke-linejoin="round" d="m18.8 9.3628v-0.43111c0-0.23797-0.19314-0.43111-0.43111-0.43111h-5.173c-0.23797 0-0.43111 0.19313-0.43111 0.43111v1.7244c0 0.23797 0.19314 0.43111 0.43111 0.43111h5.1733c0.23797 0 0.43111-0.19314 0.43111-0.43111v-0.43111h0.43111v1.7244h-4.3111v4.7422c0 0.23797 0.19314 0.43111 0.43111 0.43111h0.86221c0.23797 0 0.43111-0.19314 0.43111-0.43111v-3.879h3.449v-3.4492z" stroke-width=".086221" fill="${window.theme.colors.light_black}"/>`
+                svg: `<path d="m9.9994 3.9981h-6c-1.105 0-1.99 0.896-1.99 2l-0.01 12c0 1.104 0.895 2 2 2h16c1.104 0 2-0.896 2-2v-9.9999c0-1.104-0.896-2-2-2h-8l-1.9996-2z" stroke-width=".2"/><path stroke-linejoin="round" d="m18.8 9.3628v-0.43111c0-0.23797-0.19314-0.43111-0.43111-0.43111h-5.173c-0.23797 0-0.43111 0.19313-0.43111 0.43111v1.7244c0 0.23797 0.19314 0.43111 0.43111 0.43111h5.1733c0.23797 0 0.43111-0.19314 0.43111-0.43111v-0.43111h0.43111v1.7244h-4.3111v4.7422c0 0.23797 0.19314 0.43111 0.43111 0.43111h0.86221c0.23797 0 0.43111-0.19314 0.43111-0.43111v-3.879h3.449v-3.4492z" stroke-width=".086221" fill="${theme.colors.light_black}"/>`
             },
             kblayout: {
                 width: 24,
@@ -38,7 +41,7 @@ class FilesystemDisplay {
             kblayoutsDir: {
                 width: 24,
                 height: 24,
-                svg: `<path d="m9.9994 3.9981h-6c-1.105 0-1.99 0.896-1.99 2l-0.01 12c0 1.104 0.895 2 2 2h16c1.104 0 2-0.896 2-2v-9.9999c0-1.104-0.896-2-2-2h-8l-1.9996-2z" stroke-width=".2"/><path stroke-linejoin="round" d="m17.48 11.949h-1.14v-1.14h1.14m0 2.8499h-1.14v-1.14h1.14m-1.7099-0.56999h-1.14v-1.14h1.14m0 2.8499h-1.14v-1.14h1.14m0 3.4199h-4.56v-1.14h4.56m-5.13-2.85h-1.1399v-1.14h1.14m0 2.8499h-1.1399v-1.14h1.14m0.56998 0h1.14v1.14h-1.14m0-2.8499h1.14v1.14h-1.14m1.7099 0.56999h1.14v1.14h-1.14m0-2.8499h1.14v1.14h-1.14m5.13-2.8494h-9.1199c-0.62982 0-1.1343 0.51069-1.1343 1.14l-0.0057 5.6998c0 0.62925 0.51013 1.14 1.14 1.14h9.1196c0.62925 0 1.14-0.5107 1.14-1.14v-5.6998c0-0.62926-0.5107-1.14-1.14-1.14z" stroke-width="0.114" fill="${window.theme.colors.light_black}"/>`
+                svg: `<path d="m9.9994 3.9981h-6c-1.105 0-1.99 0.896-1.99 2l-0.01 12c0 1.104 0.895 2 2 2h16c1.104 0 2-0.896 2-2v-9.9999c0-1.104-0.896-2-2-2h-8l-1.9996-2z" stroke-width=".2"/><path stroke-linejoin="round" d="m17.48 11.949h-1.14v-1.14h1.14m0 2.8499h-1.14v-1.14h1.14m-1.7099-0.56999h-1.14v-1.14h1.14m0 2.8499h-1.14v-1.14h1.14m0 3.4199h-4.56v-1.14h4.56m-5.13-2.85h-1.1399v-1.14h1.14m0 2.8499h-1.1399v-1.14h1.14m0.56998 0h1.14v1.14h-1.14m0-2.8499h1.14v1.14h-1.14m1.7099 0.56999h1.14v1.14h-1.14m0-2.8499h1.14v1.14h-1.14m5.13-2.8494h-9.1199c-0.62982 0-1.1343 0.51069-1.1343 1.14l-0.0057 5.6998c0 0.62925 0.51013 1.14 1.14 1.14h9.1196c0.62925 0 1.14-0.5107 1.14-1.14v-5.6998c0-0.62926-0.5107-1.14-1.14-1.14z" stroke-width="0.114" fill="${theme.colors.light_black}"/>`
             },
             settings: {
                 width: 24,
@@ -88,11 +91,8 @@ class FilesystemDisplay {
             <h2 id="fs_disp_error">CANNOT ACCESS CURRENT WORKING DIRECTORY</h2>`;
         };
 
-        this.followTab = () => {
-            if (this._noTracking) return false;
-
-            let num = window.currentTerm;
-
+        this._attachCwdListener = (num) => {
+            if (!window.term || !window.term[num]) return;
             window.term[num].oncwdchange = cwd => {
                 if (this._noTracking) return false;
 
@@ -111,7 +111,20 @@ class FilesystemDisplay {
                 }
             };
         };
+
+        this.followTab = () => {
+            if (this._noTracking) return false;
+            let num = window.currentTerm;
+            this._attachCwdListener(num);
+        };
         this.followTab();
+
+        // Subscribe to active terminal changes via store
+        if (this._store) {
+            this._unsubs.push(this._store.on('activeTerminal', () => {
+                this.followTab();
+            }));
+        }
 
         this.watchFS = dir => {
             if (this._fsWatcher) {
@@ -494,17 +507,28 @@ class FilesystemDisplay {
             this.space_bar.text.innerHTML = "Calculating available space...";
             this.space_bar.bar.removeAttribute("value");
 
-            window.si.fsSize().catch(() => {
-                this.space_bar.text.innerHTML = "Could not calculate mountpoint usage.";
-                this.space_bar.bar.value = 100;
-            }).then(d => {
-                d.forEach(fsBlock => {
+            // Use store data if available, else fetch directly
+            const cachedFsSize = this._store ? this._store.get('systemData.fsSize') : null;
+            if (cachedFsSize) {
+                cachedFsSize.forEach(fsBlock => {
                     if (diskPath.startsWith(fsBlock.mount)) {
                         this.fsBlock = fsBlock;
                     }
                 });
                 this.renderDiskUsage(this.fsBlock);
-            });
+            } else {
+                window.si.fsSize().catch(() => {
+                    this.space_bar.text.innerHTML = "Could not calculate mountpoint usage.";
+                    this.space_bar.bar.value = 100;
+                }).then(d => {
+                    d.forEach(fsBlock => {
+                        if (diskPath.startsWith(fsBlock.mount)) {
+                            this.fsBlock = fsBlock;
+                        }
+                    });
+                    this.renderDiskUsage(this.fsBlock);
+                });
+            }
         };
 
         this.renderDiskUsage = async fsBlock => {
@@ -720,6 +744,7 @@ class FilesystemDisplay {
     destroy() {
         if (this._timer) clearInterval(this._timer);
         if (this._fsWatcher) this._fsWatcher.close();
+        this._unsubs.forEach(fn => fn());
     }
 }
 
