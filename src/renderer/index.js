@@ -174,13 +174,20 @@ window._loadTheme = theme => {
     let termFont = new FontFace(theme.terminal.fontFamily, `url("${fontPath(theme.terminal.fontFamily).replace(/\\/g, '/')}")`);
 
     document.fonts.add(mainFont);
-    document.fonts.load("12px "+theme.cssvars.font_main);
     document.fonts.add(lightFont);
-    document.fonts.load("12px "+theme.cssvars.font_main_light);
     document.fonts.add(termFont);
-    document.fonts.load("12px "+theme.terminal.fontFamily);
+    window.__themeFontLoad = Promise.race([
+        Promise.allSettled([
+            mainFont.load(),
+            lightFont.load(),
+            termFont.load(),
+        ]),
+        new Promise(resolve => {
+            setTimeout(resolve, 3000);
+        }),
+    ]);
 
-    document.querySelector("head").innerHTML += `<style class="theming">
+    document.querySelector("head").insertAdjacentHTML('beforeend', `<style class="theming">
     :root {
         --font_main: "${window._purifyCSS(theme.cssvars.font_main)}";
         --font_main_light: "${window._purifyCSS(theme.cssvars.font_main_light)}";
@@ -202,7 +209,7 @@ window._loadTheme = theme => {
    	   ${(window.settings.nocursorOverride || window.settings.nocursor) ? "cursor: none !important;" : ""}
 	}
     ${window._purifyCSS(theme.injectCSS || "")}
-    </style>`;
+    </style>`);
 
     window.theme = theme;
     window.theme.r = theme.colors.r;
@@ -229,23 +236,14 @@ function initGraphicalErrorHandling() {
 }
 
 function waitForFonts() {
-    return new Promise(resolve => {
-        if (document.readyState !== "complete" || document.fonts.status !== "loaded") {
-            document.addEventListener("readystatechange", () => {
-                if (document.readyState === "complete") {
-                    if (document.fonts.status === "loaded") {
-                        resolve();
-                    } else {
-                        document.fonts.onloadingdone = () => {
-                            if (document.fonts.status === "loaded") resolve();
-                        };
-                    }
-                }
-            });
-        } else {
-            resolve();
-        }
-    });
+    const domReady = document.readyState === "complete"
+        ? Promise.resolve()
+        : new Promise(resolve => {
+            window.addEventListener("load", resolve, { once: true });
+        });
+    const fontReady = window.__themeFontLoad || Promise.resolve();
+
+    return Promise.all([domReady, fontReady]).then(() => undefined);
 }
 
 // Init audio
@@ -382,7 +380,9 @@ async function getDisplayName() {
 }
 
 async function initUI() {
-    document.body.innerHTML += `<section class="mod_column" id="mod_column_left">
+    // Use insertAdjacentHTML instead of innerHTML += to avoid destroying existing DOM
+    // (innerHTML += re-parses the entire body, which crashes Chrome's renderer with augmented-ui)
+    document.body.insertAdjacentHTML('beforeend', `<section class="mod_column" id="mod_column_left">
         <h3 class="title"><p>PANEL</p><p>SYSTEM</p></h3>
     </section>
     <section id="main_shell" style="height:0%;width:0%;opacity:0;margin-bottom:30vh;" augmented-ui="bl-clip tr-clip exe">
@@ -391,7 +391,7 @@ async function initUI() {
     </section>
     <section class="mod_column" id="mod_column_right">
         <h3 class="title"><p>PANEL</p><p>NETWORK</p></h3>
-    </section>`;
+    </section>`);
 
     await window._delay(10);
     window.audioManager.expand.play();
@@ -403,11 +403,11 @@ async function initUI() {
 
     await window._delay(700);
     document.getElementById("main_shell").setAttribute("style", "opacity: 0;");
-    document.body.innerHTML += `
+    document.body.insertAdjacentHTML('beforeend', `
     <section id="filesystem" style="width: 0px;" class="${window.settings.hideDotfiles ? "hideDotfiles" : ""} ${window.settings.fsListView ? "list-view" : ""}">
     </section>
     <section id="keyboard" style="opacity:0;">
-    </section>`;
+    </section>`);
 
     // Load keyboard layout via preload bridge
     const kbLayout = await window.edex.config.readKeyboardLayout(window.settings.keyboard);
@@ -484,7 +484,7 @@ async function initUI() {
 
     // Initialize the terminal
     let shellContainer = document.getElementById("main_shell");
-    shellContainer.innerHTML += `
+    shellContainer.insertAdjacentHTML('beforeend', `
         <ul id="main_shell_tabs">
             <li id="shell_tab0" onclick="window.focusShellTab(0);" class="active"><p>MAIN SHELL</p></li>
             <li id="shell_tab1" onclick="window.focusShellTab(1);"><p>EMPTY</p></li>
@@ -498,7 +498,7 @@ async function initUI() {
             <pre id="terminal2"></pre>
             <pre id="terminal3"></pre>
             <pre id="terminal4"></pre>
-        </div>`;
+        </div>`);
     window.term = {
         0: new Terminal({
             parentId: "terminal0",
