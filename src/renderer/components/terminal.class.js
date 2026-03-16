@@ -1,7 +1,6 @@
 import { Terminal as XTerm } from 'xterm';
 import { AttachAddon } from 'xterm-addon-attach';
 import { FitAddon } from 'xterm-addon-fit';
-import { LigaturesAddon } from 'xterm-addon-ligatures';
 import { WebglAddon } from 'xterm-addon-webgl';
 import color from 'color';
 import { TerminalMessage } from '../../shared/terminal-protocol.js';
@@ -143,8 +142,12 @@ class Terminal {
         this.term.loadAddon(fitAddon);
         this.term.open(document.getElementById(opts.parentId));
         this.term.loadAddon(new WebglAddon());
-        let ligaturesAddon = new LigaturesAddon();
-        this.term.loadAddon(ligaturesAddon);
+        // Ligatures addon uses Node.js fs/util at eval time — load dynamically
+        import('xterm-addon-ligatures').then(({ LigaturesAddon }) => {
+            this.term.loadAddon(new LigaturesAddon());
+        }).catch(() => {
+            // Expected in context-isolated renderer: font discovery requires Node.js
+        });
         const keydownHandler = opts.keydownHandler || (e => window.keyboard.keydownHandler(e));
         this.term.attachCustomKeyEventHandler(e => {
             keydownHandler(e);
