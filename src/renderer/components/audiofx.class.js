@@ -2,7 +2,13 @@ import { Howl, Howler } from 'howler';
 
 class AudioManager {
     constructor() {
-        const assetsPath = window.edex.app.getAssetsPath();
+        let assetsPath = window.edex.app.getAssetsPath();
+        // Use file:// URLs so Howler loads from disk, not via Vite HTTP server
+        if (assetsPath.startsWith('/')) {
+            assetsPath = 'file://' + assetsPath;
+        } else {
+            assetsPath = 'file:///' + assetsPath.replace(/\\/g, '/');
+        }
         const audioDir = assetsPath + '/audio';
 
         if (window.settings.audio === true) {
