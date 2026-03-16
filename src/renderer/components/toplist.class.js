@@ -15,6 +15,8 @@ class Toplist {
         this._element.onclick = this.processList;
 
         this.parent.append(this._element);
+        this._table = document.getElementById("mod_toplist_table");
+        this._rows = []; // cached row elements for in-place updates
 
         this.currentlyUpdating = false;
 
@@ -55,16 +57,31 @@ class Toplist {
                 return ((b.cpu-a.cpu)*100 + b.mem-a.mem);
             }).splice(0, 5);
 
-            document.querySelectorAll("#mod_toplist_table > tr").forEach(el => {
-                el.remove();
-            });
-            list.forEach(proc => {
-                let el = document.createElement("tr");
-                el.innerHTML = `<td>${proc.pid}</td>
-                                <td><strong>${proc.name}</strong></td>
-                                <td>${Math.round(proc.cpu*10)/10}%</td>
-                                <td>${Math.round(proc.mem*10)/10}%</td>`;
-                document.getElementById("mod_toplist_table").append(el);
+            // Update existing rows in-place or add/remove as needed
+            while (this._rows.length > list.length) {
+                this._rows.pop().remove();
+            }
+            list.forEach((proc, i) => {
+                if (i < this._rows.length) {
+                    // Update existing row cells via textContent
+                    const cells = this._rows[i].children;
+                    cells[0].textContent = proc.pid;
+                    cells[1].firstChild.textContent = proc.name;
+                    cells[2].textContent = `${Math.round(proc.cpu*10)/10}%`;
+                    cells[3].textContent = `${Math.round(proc.mem*10)/10}%`;
+                } else {
+                    // Create new row
+                    const el = document.createElement("tr");
+                    for (let j = 0; j < 4; j++) el.appendChild(document.createElement("td"));
+                    el.children[0].textContent = proc.pid;
+                    const strong = document.createElement("strong");
+                    strong.textContent = proc.name;
+                    el.children[1].appendChild(strong);
+                    el.children[2].textContent = `${Math.round(proc.cpu*10)/10}%`;
+                    el.children[3].textContent = `${Math.round(proc.mem*10)/10}%`;
+                    this._table.appendChild(el);
+                    this._rows.push(el);
+                }
             });
         } finally {
             this.currentlyUpdating = false;
@@ -193,22 +210,29 @@ class Toplist {
 
                 if (removed) clearInterval(updateInterval);
                 else {
-                    document.querySelectorAll("#processList > tr").forEach(el => {
-                        el.remove();
-                    });
-
+                    const tbody = document.getElementById("processList");
+                    // Batch update using DocumentFragment
+                    const frag = document.createDocumentFragment();
+                    const fields = ["pid", "name", "user", "cpu", "mem", "state", "started", "runtime"];
                     list.forEach(proc => {
                         let el = document.createElement("tr");
-                        el.innerHTML = `<td class="pid">${proc.pid}</td>
-                            <td class="name">${proc.name}</td>
-                            <td class="user">${proc.user}</td>
-                            <td class="cpu">${Math.round(proc.cpu * 10) / 10}%</td>
-                            <td class="mem">${Math.round(proc.mem * 10) / 10}%</td>
-                            <td class="state">${proc.state}</td>
-                            <td class="started">${proc.started}</td>
-                            <td class="runtime">${formatRuntime(proc.runtime)}</td>`;
-                        document.getElementById("processList").append(el);
+                        fields.forEach(f => {
+                            let td = document.createElement("td");
+                            td.className = f;
+                            let val;
+                            switch(f) {
+                                case "cpu": val = `${Math.round(proc.cpu * 10) / 10}%`; break;
+                                case "mem": val = `${Math.round(proc.mem * 10) / 10}%`; break;
+                                case "runtime": val = formatRuntime(proc.runtime); break;
+                                default: val = proc[f];
+                            }
+                            td.textContent = val;
+                            el.appendChild(td);
+                        });
+                        frag.appendChild(el);
                     });
+                    tbody.textContent = "";
+                    tbody.appendChild(frag);
                 }
             });
         }

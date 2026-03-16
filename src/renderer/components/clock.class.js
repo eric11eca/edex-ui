@@ -7,10 +7,28 @@ class Clock {
 
         this.parent = document.getElementById(parentId);
         this.parent.innerHTML += `<div id="mod_clock" class="${(this.twelveHours) ? "mod_clock_twelve" : ""}">
-            <h1 id="mod_clock_text"><span>?</span><span>?</span><span>:</span><span>?</span><span>?</span><span>:</span><span>?</span><span>?</span></h1>
+            <h1 id="mod_clock_text"></h1>
         </div>`;
 
-        this.lastTime = new Date();
+        // Build clock spans once and cache references
+        const clockEl = document.getElementById("mod_clock_text");
+        this._spans = [];
+        // HH:MM:SS = 8 characters, each gets a span or em
+        for (let i = 0; i < 8; i++) {
+            const el = (i === 2 || i === 5)
+                ? document.createElement("em")
+                : document.createElement("span");
+            el.textContent = (i === 2 || i === 5) ? ":" : "?";
+            clockEl.appendChild(el);
+            this._spans.push(el);
+        }
+        if (this.twelveHours) {
+            this._ampmSpan = document.createElement("span");
+            this._ampmSpan.textContent = "";
+            clockEl.appendChild(this._ampmSpan);
+        }
+
+        this._lastDigits = "";
 
         this.updateClock();
         this.updater = setInterval(() => {
@@ -19,31 +37,30 @@ class Clock {
     }
     updateClock() {
         let time = new Date();
-        let array = [time.getHours(), time.getMinutes(), time.getSeconds()];
+        let h = time.getHours();
+        let m = time.getMinutes();
+        let s = time.getSeconds();
 
         if (this.twelveHours) {
-            this.ampm = (array[0] >= 12) ? "PM" : "AM";
-            if (array[0] > 12) array[0] = array[0] - 12;
-            if (array[0] === 0) array[0] = 12;
+            const ampm = (h >= 12) ? "PM" : "AM";
+            if (h > 12) h = h - 12;
+            if (h === 0) h = 12;
+            if (this._ampmSpan.textContent !== ampm) {
+                this._ampmSpan.textContent = ampm;
+            }
         }
 
-        array.forEach((e, i) => {
-            if (e.toString().length !== 2) {
-                array[i] = "0"+e;
+        const digits = `${h < 10 ? "0" : ""}${h}:${m < 10 ? "0" : ""}${m}:${s < 10 ? "0" : ""}${s}`;
+
+        // Only update spans whose character changed
+        if (digits !== this._lastDigits) {
+            for (let i = 0; i < 8; i++) {
+                if (!this._lastDigits || digits[i] !== this._lastDigits[i]) {
+                    this._spans[i].textContent = digits[i];
+                }
             }
-        });
-        let clockString = `${array[0]}:${array[1]}:${array[2]}`;
-        array = clockString.match(/.{1}/g);
-        clockString = "";
-        array.forEach(e => {
-            if (e === ":") clockString += "<em>"+e+"</em>";
-            else clockString += "<span>"+e+"</span>";
-        });
-
-        if (this.twelveHours) clockString += `<span>${this.ampm}</span>`;
-
-        document.getElementById("mod_clock_text").innerHTML = clockString;
-        this.lastTime = time;
+            this._lastDigits = digits;
+        }
     }
     destroy() {
         if (this.updater) clearInterval(this.updater);

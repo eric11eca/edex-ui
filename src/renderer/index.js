@@ -46,25 +46,8 @@ import { AudioManager } from './components/audiofx.class.js';
 import { EdexStore } from './store/index.js';
 import { SystemMonitorScheduler } from './store/system-monitor.js';
 
-// Make classes available globally for inline onclick handlers
+// Modal is still needed on window for modal button action strings
 window.Modal = Modal;
-window.Terminal = Terminal;
-window.DocReader = DocReader;
-window.MediaPlayer = MediaPlayer;
-window.FilesystemDisplay = FilesystemDisplay;
-window.Keyboard = Keyboard;
-window.UpdateChecker = UpdateChecker;
-window.Clock = Clock;
-window.Sysinfo = Sysinfo;
-window.HardwareInspector = HardwareInspector;
-window.Cpuinfo = Cpuinfo;
-window.Netstat = Netstat;
-window.Conninfo = Conninfo;
-window.LocationGlobe = LocationGlobe;
-window.RAMwatcher = RAMwatcher;
-window.Toplist = Toplist;
-window.FuzzyFinder = FuzzyFinder;
-window.AudioManager = AudioManager;
 
 // Security helpers
 window._escapeHtml = text => {
@@ -486,11 +469,11 @@ async function initUI() {
     let shellContainer = document.getElementById("main_shell");
     shellContainer.insertAdjacentHTML('beforeend', `
         <ul id="main_shell_tabs">
-            <li id="shell_tab0" onclick="window.focusShellTab(0);" class="active"><p>MAIN SHELL</p></li>
-            <li id="shell_tab1" onclick="window.focusShellTab(1);"><p>EMPTY</p></li>
-            <li id="shell_tab2" onclick="window.focusShellTab(2);"><p>EMPTY</p></li>
-            <li id="shell_tab3" onclick="window.focusShellTab(3);"><p>EMPTY</p></li>
-            <li id="shell_tab4" onclick="window.focusShellTab(4);"><p>EMPTY</p></li>
+            <li id="shell_tab0" class="active"><p>MAIN SHELL</p></li>
+            <li id="shell_tab1"><p>EMPTY</p></li>
+            <li id="shell_tab2"><p>EMPTY</p></li>
+            <li id="shell_tab3"><p>EMPTY</p></li>
+            <li id="shell_tab4"><p>EMPTY</p></li>
         </ul>
         <div id="main_shell_innercontainer">
             <pre id="terminal0" class="active"></pre>
@@ -499,6 +482,15 @@ async function initUI() {
             <pre id="terminal3"></pre>
             <pre id="terminal4"></pre>
         </div>`);
+
+    // Event delegation for shell tabs (replaces inline onclick)
+    document.getElementById("main_shell_tabs").addEventListener("click", (e) => {
+        const tab = e.target.closest("li");
+        if (!tab) return;
+        const num = parseInt(tab.id.replace("shell_tab", ""), 10);
+        window.focusShellTab(num);
+    });
+
     window.term = {
         0: new Terminal({
             parentId: "terminal0",
@@ -516,7 +508,19 @@ async function initUI() {
     window.term[0].term.writeln("\x1b[1m"+`Welcome to eDEX-UI v${window.edex.app.getVersion()} - Electron v${window.edex.electronVersion}`+"\x1b[0m");
 
     await window._delay(100);
-    window.fsDisp = new FilesystemDisplay({ parentId: "filesystem", store });
+    window.fsDisp = new FilesystemDisplay({
+        parentId: "filesystem",
+        store,
+        callbacks: {
+            getActiveTerm: () => window.term[window.currentTerm],
+            getKeyboardDataset: () => window.keyboard.container.dataset,
+            themeChanger: (name) => window.themeChanger(name),
+            remakeKeyboard: (name) => window.remakeKeyboard(name),
+            openSettings: () => window.openSettings(),
+            openShortcutsHelp: () => window.openShortcutsHelp(),
+            playFolderSound: () => window.audioManager.folder.play(),
+        }
+    });
 
     await window._delay(200);
     document.getElementById("filesystem").setAttribute("style", "opacity: 1;");

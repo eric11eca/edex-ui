@@ -11,14 +11,18 @@ class LocationGlobe {
         this.ENCOM = window.ENCOM;
 
         this.parent = document.getElementById(parentId);
-        this.parent.innerHTML += `<div id="mod_globe">
+        this.parent.insertAdjacentHTML('beforeend', `<div id="mod_globe">
             <div id="mod_globe_innercontainer">
                 <h1>WORLD VIEW<i>GLOBAL NETWORK MAP</i></h1>
                 <h2>ENDPOINT LAT/LON<i class="mod_globe_headerInfo">0.0000, 0.0000</i></h2>
                 <div id="mod_globe_canvas_placeholder"></div>
                 <h3>OFFLINE</h3>
             </div>
-        </div>`;
+        </div>`);
+
+        // Cache DOM refs
+        this._globeEl = document.getElementById("mod_globe");
+        this._headerInfo = document.querySelector("i.mod_globe_headerInfo");
 
         this.lastgeo = {};
         this.conns = [];
@@ -51,19 +55,20 @@ class LocationGlobe {
             placeholder.remove();
             container.append(this.globe.domElement);
 
-            this._animate = () => {
-                if (this.globe) {
-                    this.globe.tick();
+            // Pure rAF loop with frame-rate limiter (30fps)
+            this._lastFrame = 0;
+            this._frameInterval = 1000 / 30;
+            this._animate = (timestamp) => {
+                if (!this._animate) return;
+                try {
+                    requestAnimationFrame(this._animate);
+                } catch(e) {
+                    console.warn(e);
+                    return;
                 }
-                if (this._animate) {
-                    setTimeout(() => {
-                        try {
-                            requestAnimationFrame(this._animate);
-                        } catch(e) {
-                            console.warn(e);
-                        }
-                    }, 1000 / 30);
-                }
+                if (timestamp - this._lastFrame < this._frameInterval) return;
+                this._lastFrame = timestamp;
+                if (this.globe) this.globe.tick();
             };
             this.globe.init(theme.colors.light_black, () => {
                 this._animate();
@@ -202,8 +207,8 @@ class LocationGlobe {
     updateLoc() {
         if (!this.globe) return;
         if (this._isOffline()) {
-            document.querySelector("div#mod_globe").setAttribute("class", "offline");
-            document.querySelector("i.mod_globe_headerInfo").innerText = "(OFFLINE)";
+            this._globeEl.className = "offline";
+            this._headerInfo.textContent = "(OFFLINE)";
 
             this.removePins();
             this.removeMarkers();
@@ -214,9 +219,9 @@ class LocationGlobe {
             };
         } else {
             this.updateConOnlineConnection().then(() => {
-                document.querySelector("div#mod_globe").setAttribute("class", "");
+                this._globeEl.className = "";
             }).catch(() => {
-                document.querySelector("i.mod_globe_headerInfo").innerText = "UNKNOWN";
+                this._headerInfo.textContent = "UNKNOWN";
             });
         }
     }
@@ -229,7 +234,7 @@ class LocationGlobe {
 
         if (newgeo.latitude !== this.lastgeo.latitude || newgeo.longitude !== this.lastgeo.longitude) {
 
-            document.querySelector("i.mod_globe_headerInfo").innerText = `${newgeo.latitude}, ${newgeo.longitude}`;
+            this._headerInfo.textContent = `${newgeo.latitude}, ${newgeo.longitude}`;
             this.removePins();
             this.removeMarkers();
             this.conns = [];
@@ -239,7 +244,7 @@ class LocationGlobe {
         }
 
         this.lastgeo = newgeo;
-        document.querySelector("div#mod_globe").setAttribute("class", "");
+        this._globeEl.className = "";
     }
 
     _handleConnectionsData(conns) {
