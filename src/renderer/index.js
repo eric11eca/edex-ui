@@ -765,6 +765,7 @@ window.openShortcutsHelp = () => {
         "SETTINGS": "Open the settings editor.",
         "SHORTCUTS": "List and edit keyboard shortcuts.",
         "FUZZY_SEARCH": "Search for entries in the current working directory.",
+        "TERMINAL_SEARCH": "Search text in the active terminal scrollback.",
         "FS_LIST_VIEW": "Toggle list/grid view in file browser.",
         "FS_DOTFILES": "Toggle hidden files in file browser.",
         "KB_PASSMODE": "Toggle on-screen keyboard password mode.",
@@ -810,6 +811,55 @@ window.openShortcutsHelp = () => {
     wrap1.addEventListener('toggle', e => { wrap2.open = !wrap1.open; });
     wrap2.addEventListener('toggle', e => { wrap1.open = !wrap2.open; });
 };
+
+// Terminal search bar
+function toggleTerminalSearch() {
+    let searchBar = document.getElementById("terminal_search_bar");
+    if (searchBar) {
+        searchBar.remove();
+        window.term[window.currentTerm].term.focus();
+        return;
+    }
+    const bar = document.createElement("div");
+    bar.id = "terminal_search_bar";
+    bar.innerHTML = `<input type="text" placeholder="Search terminal..." spellcheck="false">
+        <button id="tsearch_prev">&uarr;</button>
+        <button id="tsearch_next">&darr;</button>
+        <button id="tsearch_close">&times;</button>`;
+    bar.style.cssText = "position:absolute;top:0;right:2vh;z-index:999;display:flex;gap:4px;padding:4px 8px;background:rgba(var(--color_r),var(--color_g),var(--color_b),0.15);border:1px solid rgb(var(--color_r),var(--color_g),var(--color_b));";
+    const input = bar.querySelector("input");
+    input.style.cssText = "background:transparent;border:1px solid rgba(var(--color_r),var(--color_g),var(--color_b),0.3);color:rgb(var(--color_r),var(--color_g),var(--color_b));font-family:var(--font_main);font-size:1.2vh;padding:2px 6px;outline:none;width:20vh;";
+    bar.querySelectorAll("button").forEach(btn => {
+        btn.style.cssText = "background:transparent;border:1px solid rgba(var(--color_r),var(--color_g),var(--color_b),0.3);color:rgb(var(--color_r),var(--color_g),var(--color_b));cursor:pointer;font-size:1.2vh;padding:2px 6px;";
+    });
+    document.getElementById("main_shell").appendChild(bar);
+    input.focus();
+
+    const doSearch = (dir) => {
+        const q = input.value;
+        if (!q) return;
+        const term = window.term[window.currentTerm];
+        if (dir === "prev") term.findPrevious(q, { regex: false, caseSensitive: false });
+        else term.findNext(q, { regex: false, caseSensitive: false });
+    };
+    input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            doSearch(e.shiftKey ? "prev" : "next");
+            e.preventDefault();
+        }
+        if (e.key === "Escape") {
+            bar.remove();
+            window.term[window.currentTerm].term.focus();
+        }
+        e.stopPropagation();
+    });
+    bar.querySelector("#tsearch_next").addEventListener("click", () => doSearch("next"));
+    bar.querySelector("#tsearch_prev").addEventListener("click", () => doSearch("prev"));
+    bar.querySelector("#tsearch_close").addEventListener("click", () => {
+        bar.remove();
+        window.term[window.currentTerm].term.focus();
+    });
+}
 
 window.useAppShortcut = action => {
     // Handle shell shortcuts (objects from main process)
@@ -860,6 +910,7 @@ window.useAppShortcut = action => {
         case "SETTINGS": window.openSettings(); return true;
         case "SHORTCUTS": window.openShortcutsHelp(); return true;
         case "FUZZY_SEARCH": window.activeFuzzyFinder = new FuzzyFinder(); return true;
+        case "TERMINAL_SEARCH": toggleTerminalSearch(); return true;
         case "FS_LIST_VIEW": window.fsDisp.toggleListview(); return true;
         case "FS_DOTFILES": window.fsDisp.toggleHidedotfiles(); return true;
         case "KB_PASSMODE": window.keyboard.togglePasswordMode(); return true;

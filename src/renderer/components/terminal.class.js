@@ -2,6 +2,9 @@ import { Terminal as XTerm } from 'xterm';
 import { AttachAddon } from 'xterm-addon-attach';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebglAddon } from 'xterm-addon-webgl';
+import { SearchAddon } from 'xterm-addon-search';
+import { WebLinksAddon } from 'xterm-addon-web-links';
+import { Unicode11Addon } from 'xterm-addon-unicode11';
 import color from 'color';
 import { TerminalMessage } from '../../shared/terminal-protocol.js';
 
@@ -112,7 +115,7 @@ class Terminal {
             fontWeightBold: theme.terminal.fontWeightBold || "bold",
             letterSpacing: theme.terminal.letterSpacing || 0,
             lineHeight: theme.terminal.lineHeight || 1,
-            scrollback: 1500,
+            scrollback: settings.scrollback || 10000,
             bellStyle: "none",
             theme: {
                 foreground: theme.terminal.foreground,
@@ -142,6 +145,21 @@ class Terminal {
         this.term.loadAddon(fitAddon);
         this.term.open(document.getElementById(opts.parentId));
         this.term.loadAddon(new WebglAddon());
+
+        // Search addon
+        this._searchAddon = new SearchAddon();
+        this.term.loadAddon(this._searchAddon);
+
+        // Clickable URLs
+        this.term.loadAddon(new WebLinksAddon((event, uri) => {
+            window.edex.shell.openExternal(uri);
+        }));
+
+        // Unicode 11 support (emoji, CJK, etc.)
+        const unicode11 = new Unicode11Addon();
+        this.term.loadAddon(unicode11);
+        this.term.unicode.activeVersion = '11';
+
         // Ligatures addon uses Node.js fs/util at eval time — load dynamically
         import('xterm-addon-ligatures').then(({ LigaturesAddon }) => {
             this.term.loadAddon(new LigaturesAddon());
@@ -319,6 +337,14 @@ class Terminal {
             },
             didCopy: false
         };
+    }
+
+    findNext(query, opts) {
+        if (this._searchAddon) this._searchAddon.findNext(query, opts);
+    }
+
+    findPrevious(query, opts) {
+        if (this._searchAddon) this._searchAddon.findPrevious(query, opts);
     }
 
     destroy() {
