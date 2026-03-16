@@ -121,7 +121,7 @@ if (themeOverride !== null) {
     window.settings.theme = themeOverride;
     window.settings.nointroOverride = true;
 }
-_loadTheme(await window.edex.config.readTheme(window.settings.theme));
+// Theme is loaded after store creation (see below) since _loadTheme writes to store
 
 // Same for keyboard override
 const kbOverride = await window.edex.hotswitch.getKbOverride();
@@ -205,6 +205,9 @@ window._loadTheme = theme => {
     window.theme.b = theme.colors.b;
     store.set('theme', window.theme);
 };
+
+// Now load the initial theme (deferred from config loading above because _loadTheme writes to store)
+window._loadTheme(await window.edex.config.readTheme(window.settings.theme));
 
 function initGraphicalErrorHandling() {
     window.edexErrorsModals = [];
