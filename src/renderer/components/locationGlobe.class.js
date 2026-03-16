@@ -3,9 +3,11 @@ import geodata from '@assets/misc/grid.json';
 import '@assets/vendor/encom-globe.js';
 
 class LocationGlobe {
-    constructor(parentId) {
+    constructor(parentId, { store } = {}) {
         if (!parentId) throw "Missing parameters";
 
+        this._store = store;
+        this._unsubs = [];
         this.ENCOM = window.ENCOM;
 
         this.parent = document.getElementById(parentId);
@@ -22,23 +24,26 @@ class LocationGlobe {
         this.conns = [];
         this._geodata = geodata;
 
+        const theme = store ? store.get('theme') : window.theme;
+        const themeColor = `rgb(${theme.r},${theme.g},${theme.b})`;
+
         this._initTimeout = setTimeout(() => {
             let container = document.getElementById("mod_globe_innercontainer");
             let placeholder = document.getElementById("mod_globe_canvas_placeholder");
 
             this.globe = new this.ENCOM.Globe(placeholder.offsetWidth, placeholder.offsetHeight, {
-                font: window.theme.cssvars.font_main,
+                font: theme.cssvars.font_main,
                 data: [],
                 tiles: this._geodata.tiles,
-                baseColor: window.theme.globe.base || `rgb(${window.theme.r},${window.theme.g},${window.theme.b})`,
-                markerColor: window.theme.globe.marker || `rgb(${window.theme.r},${window.theme.g},${window.theme.b})`,
-                pinColor: window.theme.globe.pin || `rgb(${window.theme.r},${window.theme.g},${window.theme.b})`,
-                satelliteColor: window.theme.globe.satellite || `rgb(${window.theme.r},${window.theme.g},${window.theme.b})`,
+                baseColor: theme.globe.base || themeColor,
+                markerColor: theme.globe.marker || themeColor,
+                pinColor: theme.globe.pin || themeColor,
+                satelliteColor: theme.globe.satellite || themeColor,
                 scale: 1.1,
                 viewAngle: 0.630,
                 dayLength: 1000 * 45,
                 introLinesDuration: 2000,
-                introLinesColor: window.theme.globe.marker || `rgb(${window.theme.r},${window.theme.g},${window.theme.b})`,
+                introLinesColor: theme.globe.marker || themeColor,
                 maxPins: 300,
                 maxMarkers: 100
             });
@@ -47,29 +52,29 @@ class LocationGlobe {
             container.append(this.globe.domElement);
 
             this._animate = () => {
-                if (window.mods.globe.globe) {
-                    window.mods.globe.globe.tick();
+                if (this.globe) {
+                    this.globe.tick();
                 }
-                if (window.mods.globe._animate) {
+                if (this._animate) {
                     setTimeout(() => {
                         try {
-                            requestAnimationFrame(window.mods.globe._animate);
+                            requestAnimationFrame(this._animate);
                         } catch(e) {
                             console.warn(e);
                         }
                     }, 1000 / 30);
                 }
             };
-            this.globe.init(window.theme.colors.light_black, () => {
+            this.globe.init(theme.colors.light_black, () => {
                 this._animate();
                 window.audioManager.scan.play();
             });
 
             this.resizeHandler = () => {
                 let canvas = document.querySelector("div#mod_globe canvas");
-                window.mods.globe.globe.camera.aspect = canvas.offsetWidth / canvas.offsetHeight;
-                window.mods.globe.globe.camera.updateProjectionMatrix();
-                window.mods.globe.globe.renderer.setSize(canvas.offsetWidth, canvas.offsetHeight);
+                this.globe.camera.aspect = canvas.offsetWidth / canvas.offsetHeight;
+                this.globe.camera.updateProjectionMatrix();
+                this.globe.renderer.setSize(canvas.offsetWidth, canvas.offsetHeight);
             };
             window.addEventListener("resize", this.resizeHandler);
 
@@ -84,9 +89,9 @@ class LocationGlobe {
                 if (geo && geo.latitude && geo.longitude) {
                     const lat = Number(geo.latitude);
                     const lon = Number(geo.longitude);
-                    window.mods.globe.conns.push({
+                    this.conns.push({
                         ip,
-                        pin: window.mods.globe.globe.addPin(lat, lon, "", 1.2),
+                        pin: this.globe.addPin(lat, lon, "", 1.2),
                     });
                 }
             };
@@ -110,17 +115,47 @@ class LocationGlobe {
             this.globe.addConstellation(constellation);
         }, 2000);
 
-        this._intervalTimeout = setTimeout(() => {
-            this.updateLoc();
-            this.locUpdater = setInterval(() => {
+        if (store) {
+            // Delayed subscription start (after globe init at 4s)
+            this._intervalTimeout = setTimeout(() => {
+                // Subscribe to network state for location updates
+                this._unsubs.push(store.on('network.ipinfo', () => {
+                    this.updateLoc();
+                }));
+                this._unsubs.push(store.on('network.offline', () => {
+                    this.updateLoc();
+                }));
+                // Subscribe to connection data from coordinated scheduler
+                this._unsubs.push(store.on('systemData.networkConnections', (conns) => {
+                    if (conns) this._handleConnectionsData(conns);
+                }));
+                // Initial update
                 this.updateLoc();
-            }, 1000);
+            }, 4000);
+        } else {
+            // Legacy: own polling intervals
+            this._intervalTimeout = setTimeout(() => {
+                this.updateLoc();
+                this.locUpdater = setInterval(() => {
+                    this.updateLoc();
+                }, 1000);
 
-            this.updateConns();
-            this.connsUpdater = setInterval(() => {
                 this.updateConns();
-            }, 3000);
-        }, 4000);
+                this.connsUpdater = setInterval(() => {
+                    this.updateConns();
+                }, 3000);
+            }, 4000);
+        }
+    }
+
+    _isOffline() {
+        if (this._store) return this._store.get('network.offline');
+        return window.mods.netstat.offline;
+    }
+
+    _getIpinfo() {
+        if (this._store) return this._store.get('network.ipinfo');
+        return window.mods.netstat.ipinfo;
     }
 
     addRandomConnectedMarkers() {
@@ -135,11 +170,11 @@ class LocationGlobe {
             const lat = Number(geo.latitude);
             const lon = Number(geo.longitude);
 
-            window.mods.globe.conns.push({
+            this.conns.push({
                 ip,
-                pin: window.mods.globe.globe.addPin(lat, lon, "", 1.2)
+                pin: this.globe.addPin(lat, lon, "", 1.2)
             });
-            let mark = window.mods.globe.globe.addMarker(lat, lon, '', true);
+            let mark = this.globe.addMarker(lat, lon, '', true);
             setTimeout(() => {
                 mark.remove();
             }, 3000);
@@ -159,7 +194,8 @@ class LocationGlobe {
         return (Math.random() * (to - from) + from).toFixed(fixed) * 1;
     }
     updateLoc() {
-        if (window.mods.netstat.offline) {
+        if (!this.globe) return;
+        if (this._isOffline()) {
             document.querySelector("div#mod_globe").setAttribute("class", "offline");
             document.querySelector("i.mod_globe_headerInfo").innerText = "(OFFLINE)";
 
@@ -179,7 +215,9 @@ class LocationGlobe {
         }
     }
     async updateConOnlineConnection() {
-        let newgeo = window.mods.netstat.ipinfo.geo;
+        const ipinfo = this._getIpinfo();
+        if (!ipinfo || !ipinfo.geo) throw new Error("No IP info");
+        let newgeo = ipinfo.geo;
         newgeo.latitude = Math.round(newgeo.latitude*10000)/10000;
         newgeo.longitude = Math.round(newgeo.longitude*10000)/10000;
 
@@ -197,30 +235,35 @@ class LocationGlobe {
         this.lastgeo = newgeo;
         document.querySelector("div#mod_globe").setAttribute("class", "");
     }
-    updateConns() {
-        if (!window.mods.globe.globe || window.mods.netstat.offline) return false;
-        window.si.networkConnections().then(conns => {
-            let newconns = [];
-            conns.forEach(conn => {
-                let ip = conn.peeraddress;
-                let state = conn.state;
-                if (state === "ESTABLISHED" && ip !== "0.0.0.0" && ip !== "127.0.0.1" && ip !== "::") {
-                    newconns.push(ip);
-                }
-            });
 
-            this.conns.forEach(conn => {
-                if (newconns.indexOf(conn.ip) !== -1) {
-                    newconns.splice(newconns.indexOf(conn.ip), 1);
-                } else {
-                    this.removeConn(conn.ip);
-                }
-            });
+    _handleConnectionsData(conns) {
+        if (!this.globe || this._isOffline()) return;
 
-            newconns.forEach(ip => {
-                this.addConn(ip);
-            });
+        let newconns = [];
+        conns.forEach(conn => {
+            let ip = conn.peeraddress;
+            let state = conn.state;
+            if (state === "ESTABLISHED" && ip !== "0.0.0.0" && ip !== "127.0.0.1" && ip !== "::") {
+                newconns.push(ip);
+            }
         });
+
+        this.conns.forEach(conn => {
+            if (newconns.indexOf(conn.ip) !== -1) {
+                newconns.splice(newconns.indexOf(conn.ip), 1);
+            } else {
+                this.removeConn(conn.ip);
+            }
+        });
+
+        newconns.forEach(ip => {
+            this.addConn(ip);
+        });
+    }
+
+    updateConns() {
+        if (!this.globe || this._isOffline()) return false;
+        window.si.networkConnections().then(conns => this._handleConnectionsData(conns));
     }
     destroy() {
         if (this._initTimeout) clearTimeout(this._initTimeout);
@@ -238,6 +281,7 @@ class LocationGlobe {
         if (this.globe && this.globe.renderer) {
             this.globe.renderer.dispose();
         }
+        this._unsubs.forEach(fn => fn());
     }
 }
 

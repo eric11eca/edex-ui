@@ -442,10 +442,10 @@ async function initUI() {
     window.mods.hardwareInspector = new HardwareInspector("mod_column_left", { store });
     window.mods.cpuinfo = new Cpuinfo("mod_column_left", { store });
     window.mods.ramwatcher = new RAMwatcher("mod_column_left", { store });
-    window.mods.toplist = new Toplist("mod_column_left");
-    window.mods.netstat = new Netstat("mod_column_right");
-    window.mods.globe = new LocationGlobe("mod_column_right");
-    window.mods.conninfo = new Conninfo("mod_column_right");
+    window.mods.toplist = new Toplist("mod_column_left", { store });
+    window.mods.netstat = new Netstat("mod_column_right", { store });
+    window.mods.globe = new LocationGlobe("mod_column_right", { store });
+    window.mods.conninfo = new Conninfo("mod_column_right", { store });
 
     // Fade-in animations
     document.querySelectorAll(".mod_column").forEach(e => {
@@ -559,6 +559,7 @@ window.focusShellTab = number => {
 
     if (number !== window.currentTerm && window.term[number]) {
         window.currentTerm = number;
+        store.set('activeTerminal', number);
         document.querySelectorAll(`ul#main_shell_tabs > li:not(:nth-child(${number+1}))`).forEach(e => {
             e.setAttribute("class", "");
         });
@@ -624,8 +625,9 @@ window.openSettings = async () => {
         if (i !== window.settings.monitor) monitors += `<option>${i}</option>`;
     }
     let nets = await window.si.networkInterfaces();
+    const currentIface = store.get('network.iface');
     nets.forEach(net => {
-        if (net.iface !== window.mods.netstat.iface) ifaces += `<option>${net.iface}</option>`;
+        if (net.iface !== currentIface) ifaces += `<option>${net.iface}</option>`;
     });
 
     window.keyboard.detach();
@@ -652,7 +654,7 @@ window.openSettings = async () => {
                     <tr><td>monitor</td><td>Which monitor to spawn UI in</td><td><select id="settingsEditor-monitor">${(typeof window.settings.monitor !== "undefined") ? "<option>"+window.settings.monitor+"</option>" : ""}${monitors}</select></td></tr>
                     <tr><td>nointro</td><td>Skip the intro boot log</td><td><select id="settingsEditor-nointro"><option>${window.settings.nointro}</option><option>${!window.settings.nointro}</option></select></td></tr>
                     <tr><td>nocursor</td><td>Hide the mouse cursor</td><td><select id="settingsEditor-nocursor"><option>${window.settings.nocursor}</option><option>${!window.settings.nocursor}</option></select></td></tr>
-                    <tr><td>iface</td><td>Override network monitoring interface</td><td><select id="settingsEditor-iface"><option>${window.mods.netstat.iface}</option>${ifaces}</select></td></tr>
+                    <tr><td>iface</td><td>Override network monitoring interface</td><td><select id="settingsEditor-iface"><option>${currentIface}</option>${ifaces}</select></td></tr>
                     <tr><td>allowWindowed</td><td>Allow F11 for windowed mode</td><td><select id="settingsEditor-allowWindowed"><option>${window.settings.allowWindowed}</option><option>${!window.settings.allowWindowed}</option></select></td></tr>
                     <tr><td>keepGeometry</td><td>Keep 16:9 ratio in windowed mode</td><td><select id="settingsEditor-keepGeometry"><option>${(window.settings.keepGeometry === false) ? 'false' : 'true'}</option><option>${(window.settings.keepGeometry === false) ? 'true' : 'false'}</option></select></td></tr>
                     <tr><td>excludeThreadsFromToplist</td><td>Display threads in top processes</td><td><select id="settingsEditor-excludeThreadsFromToplist"><option>${window.settings.excludeThreadsFromToplist}</option><option>${!window.settings.excludeThreadsFromToplist}</option></select></td></tr>

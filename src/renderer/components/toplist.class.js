@@ -1,8 +1,11 @@
 import { Modal } from './modal.class.js';
 
 class Toplist {
-    constructor(parentId) {
+    constructor(parentId, { store } = {}) {
         if (!parentId) throw "Missing parameters";
+
+        this._store = store;
+        this._unsubs = [];
 
         this.parent = document.getElementById(parentId);
         this._element = document.createElement("div");
@@ -15,31 +18,40 @@ class Toplist {
 
         this.currentlyUpdating = false;
 
-        this.updateList();
-        this.listUpdater = setInterval(() => {
+        if (store) {
+            this._unsubs.push(store.on('systemData.processes', (data) => {
+                if (data) this._updateFromData(data);
+            }));
+        } else {
             this.updateList();
-        }, 2000);
+            this.listUpdater = setInterval(() => {
+                this.updateList();
+            }, 2000);
+        }
     }
-    updateList() {
-        if (this.currentlyUpdating) return;
 
+    _updateFromData(data) {
+        if (this.currentlyUpdating) return;
         this.currentlyUpdating = true;
-        window.si.processes().then(data => {
+
+        try {
+            // Clone to avoid mutating store data
+            let list = [...data.list];
+
             if (window.settings.excludeThreadsFromToplist === true) {
-                data.list = data.list.sort((a, b) => {
+                list = list.sort((a, b) => {
                     return (a.pid-b.pid);
                 }).filter((e, index, a) => {
                     let i = a.findIndex(x => x.name === e.name);
                     if (i !== -1 && i !== index) {
-                        a[i].cpu = a[i].cpu+e.cpu;
-                        a[i].mem = a[i].mem+e.mem;
+                        a[i] = { ...a[i], cpu: a[i].cpu+e.cpu, mem: a[i].mem+e.mem };
                         return false;
                     }
                     return true;
                 });
             }
 
-            let list = data.list.sort((a, b) => {
+            list = list.sort((a, b) => {
                 return ((b.cpu-a.cpu)*100 + b.mem-a.mem);
             }).splice(0, 5);
 
@@ -54,7 +66,17 @@ class Toplist {
                                 <td>${Math.round(proc.mem*10)/10}%</td>`;
                 document.getElementById("mod_toplist_table").append(el);
             });
+        } finally {
             this.currentlyUpdating = false;
+        }
+    }
+
+    updateList() {
+        if (this.currentlyUpdating) return;
+        this.currentlyUpdating = true;
+        window.si.processes().then(data => {
+            this.currentlyUpdating = false;
+            this._updateFromData(data);
         });
     }
 
@@ -241,6 +263,7 @@ class Toplist {
     destroy() {
         if (this.listUpdater) clearInterval(this.listUpdater);
         if (this._element) this._element.onclick = null;
+        this._unsubs.forEach(fn => fn());
     }
 }
 

@@ -1,6 +1,10 @@
 class Netstat {
-    constructor(parentId) {
+    constructor(parentId, { store } = {}) {
         if (!parentId) throw "Missing parameters";
+
+        this._store = store;
+        this._unsubs = [];
+        this._processing = false;
 
         this.parent = document.getElementById(parentId);
         this.parent.innerHTML += `<div id="mod_netstat">
@@ -35,14 +39,28 @@ class Netstat {
             this._geoipReady = success;
         });
 
-        // Init updaters
-        this.updateInfo();
-        this.infoUpdater = setInterval(() => {
+        if (store) {
+            // Subscribe to coordinated scheduler's network interface data
+            this._unsubs.push(store.on('systemData.networkInterfaces', (data) => {
+                if (data) this._handleNetworkData(data);
+            }));
+            // Process any data that arrived before subscription
+            const existing = store.get('systemData.networkInterfaces');
+            if (existing) this._handleNetworkData(existing);
+        } else {
+            // Legacy: own polling
             this.updateInfo();
-        }, 2000);
+            this.infoUpdater = setInterval(() => {
+                this.updateInfo();
+            }, 2000);
+        }
     }
-    updateInfo() {
-        window.si.networkInterfaces().then(async data => {
+
+    async _handleNetworkData(data) {
+        if (this._processing) return;
+        this._processing = true;
+
+        try {
             let offline = false;
 
             let _net = data[0];
@@ -54,8 +72,15 @@ class Netstat {
                     if (data[netID]) {
                         _net = data[netID];
                     } else {
+                        this.iface = null;
+                        this.offline = true;
+                        document.getElementById("mod_netstat_iname").innerText = "Interface: (offline)";
+                        document.querySelector("#mod_netstat_innercontainer > div:first-child > h2").innerHTML = "OFFLINE";
+                        document.querySelector("#mod_netstat_innercontainer > div:nth-child(2) > h2").innerHTML = "--.--.--.--";
+                        document.querySelector("#mod_netstat_innercontainer > div:nth-child(3) > h2").innerHTML = "--ms";
                         window.settings.iface = false;
-                        return false;
+                        this._writeToStore();
+                        return;
                     }
                 }
             } else {
@@ -71,6 +96,7 @@ class Netstat {
                         document.querySelector("#mod_netstat_innercontainer > div:first-child > h2").innerHTML = "OFFLINE";
                         document.querySelector("#mod_netstat_innercontainer > div:nth-child(2) > h2").innerHTML = "--.--.--.--";
                         document.querySelector("#mod_netstat_innercontainer > div:nth-child(3) > h2").innerHTML = "--ms";
+                        this._writeToStore();
                         break;
                     }
                 }
@@ -105,7 +131,7 @@ class Netstat {
                         this.runsBeforeGeoIPUpdate = 10;
                     } catch(e) {
                         this.failedAttempts[e] = (this.failedAttempts[e] || 0) + 1;
-                        if (this.failedAttempts[e] > 2) return false;
+                        if (this.failedAttempts[e] > 2) return;
                         console.warn(e);
                         window.edex.log.send("note", "NetStat: Error parsing data from myexternalip.com");
                         window.edex.log.send("debug", `Error: ${e}`);
@@ -130,10 +156,30 @@ class Netstat {
                     document.querySelector("#mod_netstat_innercontainer > div:nth-child(3) > h2").innerHTML = "--ms";
                 }
             }
+
+            this._writeToStore();
+        } finally {
+            this._processing = false;
+        }
+    }
+
+    _writeToStore() {
+        if (!this._store) return;
+        this._store.batch(() => {
+            this._store.set('network.offline', this.offline);
+            this._store.set('network.iface', this.iface);
+            this._store.set('network.internalIPv4', this.internalIPv4);
+            this._store.set('network.ipinfo', this.ipinfo);
         });
     }
+
+    updateInfo() {
+        window.si.networkInterfaces().then(data => this._handleNetworkData(data));
+    }
+
     destroy() {
         if (this.infoUpdater) clearInterval(this.infoUpdater);
+        this._unsubs.forEach(fn => fn());
     }
 }
 
