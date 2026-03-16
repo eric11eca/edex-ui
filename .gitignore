@@ -44,3 +44,6 @@ dist-electron
 release
 prebuild-src
 src/node_modules
+
+# Dev config overrides (per-developer, not committed)
+.dev.json

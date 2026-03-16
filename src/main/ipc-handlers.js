@@ -7,6 +7,7 @@ import net from 'node:net';
 // Will be set by init()
 let win = null;
 let assetsBase = null;
+let devConfigPath = null;
 let settingsFile = null;
 let shortcutsFile = null;
 let lastWindowStateFile = null;
@@ -27,6 +28,7 @@ let kbOverride = null;
 export function init(options) {
   win = options.win;
   assetsBase = options.assetsBase;
+  devConfigPath = options.devConfigPath || null;
   settingsFile = options.settingsFile;
   shortcutsFile = options.shortcutsFile;
   lastWindowStateFile = options.lastWindowStateFile;
@@ -128,7 +130,14 @@ function registerWindowHandlers() {
 // --- Config handlers ---
 function registerConfigHandlers() {
   ipcMain.handle('config:readSettings', () => {
-    return JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
+    const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
+    // Merge dev overrides in dev mode
+    if (devConfigPath && fs.existsSync(devConfigPath)) {
+      try {
+        Object.assign(settings, JSON.parse(fs.readFileSync(devConfigPath, 'utf-8')));
+      } catch (e) { /* ignore parse errors */ }
+    }
+    return settings;
   });
   ipcMain.handle('config:readShortcuts', () => {
     return JSON.parse(fs.readFileSync(shortcutsFile, 'utf-8'));

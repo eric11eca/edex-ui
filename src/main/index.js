@@ -267,6 +267,26 @@ app.on('ready', async () => {
   } catch (e) {
     throw new Error("Failed to parse settings.json: " + e.message);
   }
+
+  // Dev overrides: read .dev.json from project root for quick theme/settings testing
+  const devConfigPath = path.join(projectRoot, '.dev.json');
+  if (isDev && fs.existsSync(devConfigPath)) {
+    try {
+      const devOverrides = JSON.parse(fs.readFileSync(devConfigPath, 'utf-8'));
+      Object.assign(settings, devOverrides);
+      signale.info(`Dev overrides applied from .dev.json: ${Object.keys(devOverrides).join(', ')}`);
+    } catch (e) {
+      signale.warn(`Failed to parse .dev.json: ${e.message}`);
+    }
+
+    // Watch .dev.json for changes — auto-reload the renderer
+    fs.watch(devConfigPath, { persistent: false }, (eventType) => {
+      if (eventType === 'change' && win && !win.isDestroyed()) {
+        signale.info('.dev.json changed — reloading renderer...');
+        win.webContents.reloadIgnoringCache();
+      }
+    });
+  }
   signale.pending(`Resolving shell path...`);
   settings.shell = await which(settings.shell).catch(e => { throw (e); });
   signale.info(`Shell found at ${settings.shell}`);
@@ -331,6 +351,7 @@ app.on('ready', async () => {
   initIpcHandlers({
     win,
     assetsBase,
+    devConfigPath: isDev ? devConfigPath : null,
     settingsFile,
     shortcutsFile,
     lastWindowStateFile,
