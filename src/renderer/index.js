@@ -250,6 +250,7 @@ window.audioManager = new AudioManager();
 window.edex.app.focus();
 
 let i = 0;
+let bootLogCache = null;
 if (window.settings.nointro || window.settings.nointroOverride) {
     initGraphicalErrorHandling();
     document.getElementById("boot_screen").remove();
@@ -260,7 +261,6 @@ if (window.settings.nointro || window.settings.nointroOverride) {
 }
 
 // Startup boot log
-let bootLogCache = null;
 async function displayLine() {
     let bootScreen = document.getElementById("boot_screen");
     if (!bootLogCache) {

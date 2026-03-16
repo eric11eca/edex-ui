@@ -532,7 +532,8 @@ class FilesystemDisplay {
         };
 
         this.renderDiskUsage = async fsBlock => {
-            if (document.getElementById("fs_space_bar").getAttribute("onclick") !== "" || fsBlock === null) return;
+            const spaceBar = document.getElementById("fs_space_bar");
+            if (!spaceBar || spaceBar.getAttribute("onclick") !== "" || fsBlock === null) return;
 
             let splitter = (window.edex.platform === "win32") ? "\\" : "/";
             let displayMount = (fsBlock.mount.length < 18) ? fsBlock.mount : "..."+splitter+fsBlock.mount.split(splitter).pop();
@@ -552,7 +553,10 @@ class FilesystemDisplay {
         };
 
         if (window.performance.navigation.type === 0) {
-            this.readFS(window.term[window.currentTerm].cwd || window.settings.cwd);
+            const initialCwd = window.term[window.currentTerm].cwd || window.settings.cwd;
+            this.readFS(initialCwd).catch(() => {
+                // Configured CWD may not exist; fallback handled by setFailedState
+            });
         }
 
         this.openFile = (name, filePath, type) => {

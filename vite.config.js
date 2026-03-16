@@ -89,6 +89,8 @@ export default defineConfig({
       '@styles': path.resolve(__dirname, 'src/renderer/styles'),
       '@shared': path.resolve(__dirname, 'src/shared'),
       '@assets': path.resolve(__dirname, 'src/assets'),
+      // Shim Node.js path module for browser (used by mime-types)
+      'path': path.resolve(__dirname, 'src/renderer/shims/path.js'),
     },
   },
 });
