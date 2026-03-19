@@ -9,7 +9,7 @@ import '../renderer/styles/boot_screen.css';
 import '../renderer/styles/media_player.css';
 import '../renderer/styles/main_shell.css';
 import '../renderer/styles/filesystem.css';
-import '../renderer/styles/keyboard.css';
+import '../renderer/styles/bottom-panel.css';
 import '../renderer/styles/mod_column.css';
 import '../renderer/styles/mod_clock.css';
 import '../renderer/styles/mod_sysinfo.css';
@@ -30,7 +30,10 @@ import { Terminal } from './components/terminal.class.js';
 import { DocReader } from './components/docReader.class.js';
 import { MediaPlayer } from './components/mediaPlayer.class.js';
 import { FilesystemDisplay } from './components/filesystem.class.js';
-import { Keyboard } from './components/keyboard.class.js';
+import { BottomPanel } from './components/bottom-panel.js';
+import { FilePreview } from './components/file-preview.js';
+import { GitStatus } from './components/git-status.js';
+import { ProcessManager } from './components/process-manager.js';
 import { UpdateChecker } from './components/updateChecker.class.js';
 import { Clock } from './components/clock.class.js';
 import { Sysinfo } from './components/sysinfo.class.js';
@@ -356,9 +359,8 @@ async function getDisplayName() {
     let user = window.settings.username || null;
     if (user) return user;
     try {
-        const usernameModule = await import('username');
-        const getUserName = usernameModule.default || usernameModule;
-        user = await getUserName();
+        const homeDir = window.edex.app.getPath('home');
+        user = window.edex.path.basename(homeDir);
     } catch (e) {}
     return user;
 }
@@ -369,37 +371,41 @@ async function initUI() {
     document.body.insertAdjacentHTML('beforeend', `<section class="mod_column" id="mod_column_left">
         <h3 class="title"><p>PANEL</p><p>SYSTEM</p></h3>
     </section>
-    <section id="main_shell" style="height:0%;width:0%;opacity:0;margin-bottom:30vh;" augmented-ui="bl-clip tr-clip exe">
-        <h3 class="title" style="opacity:0;"><p>TERMINAL</p><p>MAIN SHELL</p></h3>
-        <h1 id="main_shell_greeting"></h1>
-    </section>
+    <div id="center_column">
+        <section id="main_shell" style="height:0%;width:0%;opacity:0;" augmented-ui="bl-clip tr-clip exe">
+            <h3 class="title" style="opacity:0;"><p>TERMINAL</p><p>MAIN SHELL</p></h3>
+            <h1 id="main_shell_greeting"></h1>
+        </section>
+        <section id="bottom_panel"></section>
+    </div>
     <section class="mod_column" id="mod_column_right">
         <h3 class="title"><p>PANEL</p><p>NETWORK</p></h3>
     </section>`);
 
     await window._delay(10);
     window.audioManager.expand.play();
-    document.getElementById("main_shell").setAttribute("style", "height:0%;margin-bottom:30vh;");
+    document.getElementById("main_shell").setAttribute("style", "height:0%;");
 
     await window._delay(500);
-    document.getElementById("main_shell").setAttribute("style", "margin-bottom: 30vh;");
+    document.getElementById("main_shell").setAttribute("style", "");
     document.querySelector("#main_shell > h3.title").setAttribute("style", "");
 
     await window._delay(700);
-    document.getElementById("main_shell").setAttribute("style", "opacity: 0;");
-    document.body.insertAdjacentHTML('beforeend', `
-    <section id="filesystem" style="width: 0px;" class="${window.settings.hideDotfiles ? "hideDotfiles" : ""} ${window.settings.fsListView ? "list-view" : ""}">
-    </section>
-    <section id="keyboard" style="opacity:0;">
-    </section>`);
 
-    // Load keyboard layout via preload bridge
-    const kbLayout = await window.edex.config.readKeyboardLayout(window.settings.keyboard);
-    window.keyboard = new Keyboard({
-        layout: kbLayout,
-        container: "keyboard",
-        store
-    });
+    // Keyboard stub - lightweight replacement for the removed on-screen keyboard.
+    // Maintains API compatibility for components that call detach/attach/linkedToTerm.
+    window.keyboard = {
+        linkedToTerm: true,
+        detach() { this.linkedToTerm = false; },
+        attach() { this.linkedToTerm = true; },
+        keydownHandler() {},
+        togglePasswordMode() {},
+        container: { dataset: { isShiftOn: 'false', isCapsLckOn: 'false', isAltOn: 'false', isCtrlOn: 'false', isFnOn: 'false', passwordMode: 'false' } },
+        destroy() {}
+    };
+
+    // Initialize bottom panel with view registry
+    window.bottomPanel = new BottomPanel({ containerId: 'bottom_panel', store });
 
     await window._delay(10);
     document.getElementById("main_shell").setAttribute("style", "");
@@ -414,21 +420,11 @@ async function initUI() {
         }
     });
     greeter.setAttribute("style", "opacity: 1;");
-    document.getElementById("filesystem").setAttribute("style", "");
-    document.getElementById("keyboard").setAttribute("style", "");
-    document.getElementById("keyboard").setAttribute("class", "animation_state_1");
-    window.audioManager.keyboard.play();
-
-    await window._delay(100);
-    document.getElementById("keyboard").setAttribute("class", "animation_state_1 animation_state_2");
 
     await window._delay(1000);
     greeter.setAttribute("style", "opacity: 0;");
 
-    await window._delay(100);
-    document.getElementById("keyboard").setAttribute("class", "");
-
-    await window._delay(400);
+    await window._delay(500);
     greeter.remove();
 
     // Start the system monitor scheduler (coordinated SI polling)
@@ -516,23 +512,79 @@ async function initUI() {
     };
     window.term[0].term.writeln("\x1b[1m"+`Welcome to eDEX-UI v${window.edex.app.getVersion()} - Electron v${window.edex.electronVersion}`+"\x1b[0m");
 
-    await window._delay(100);
-    window.fsDisp = new FilesystemDisplay({
-        parentId: "filesystem",
-        store,
-        callbacks: {
-            getActiveTerm: () => window.term[window.currentTerm],
-            getKeyboardDataset: () => window.keyboard.container.dataset,
-            themeChanger: (name) => window.themeChanger(name),
-            remakeKeyboard: (name) => window.remakeKeyboard(name),
-            openSettings: () => window.openSettings(),
-            openShortcutsHelp: () => window.openShortcutsHelp(),
-            playFolderSound: () => window.audioManager.folder.play(),
+    // ResizeObserver to auto-refit terminal when layout changes (bottom panel open/close)
+    const resizeObserver = new ResizeObserver(() => {
+        const activeTerm = window.term[window.currentTerm];
+        if (activeTerm && typeof activeTerm.fit === 'function') {
+            activeTerm.fit();
+        }
+    });
+    resizeObserver.observe(document.getElementById("main_shell_innercontainer"));
+
+    // Register bottom panel views
+    // Files view: filesystem browser + file preview
+    window.bottomPanel.registerView('files', {
+        label: 'FILES',
+        create: ({ left, right }) => {
+            // Create filesystem section inside the left pane
+            const fsSection = document.createElement('section');
+            fsSection.id = 'filesystem';
+            fsSection.className = `${window.settings.hideDotfiles ? "hideDotfiles" : ""} ${window.settings.fsListView ? "list-view" : ""}`;
+            left.appendChild(fsSection);
+
+            const fsDisp = new FilesystemDisplay({
+                parentId: "filesystem",
+                store,
+                callbacks: {
+                    getActiveTerm: () => window.term[window.currentTerm],
+                    getKeyboardDataset: () => window.keyboard.container.dataset,
+                    themeChanger: (name) => window.themeChanger(name),
+                    remakeKeyboard: () => {}, // On-screen keyboard removed
+                    openSettings: () => window.openSettings(),
+                    openShortcutsHelp: () => window.openShortcutsHelp(),
+                    playFolderSound: () => window.audioManager.folder.play(),
+                    onFileSelect: (filePath) => {
+                        store.set('filePreview.path', filePath);
+                    },
+                }
+            });
+            window.fsDisp = fsDisp;
+
+            const filePreview = new FilePreview(right, { store });
+
+            return { left: fsDisp, right: filePreview };
         }
     });
 
-    await window._delay(200);
-    document.getElementById("filesystem").setAttribute("style", "opacity: 1;");
+    // Eagerly create the files view so fsDisp is available for shortcuts and CWD tracking
+    window.bottomPanel._ensureViewCreated('files');
+
+    // Git view: git status + process manager
+    window.bottomPanel.registerView('git', {
+        label: 'GIT',
+        create: ({ left, right }) => {
+            const gitStatus = new GitStatus(left, { store });
+
+            // Feed git CWD from active terminal
+            const activeTerm = window.term[window.currentTerm];
+            if (activeTerm && activeTerm.cwd) {
+                gitStatus.refresh(activeTerm.cwd);
+            }
+
+            const procManager = new ProcessManager(right, { store });
+
+            return { left: gitStatus, right: procManager };
+        }
+    });
+
+    // Forward terminal CWD changes to git view
+    store.on('activeTerminal', () => {
+        const term = window.term[window.currentTerm];
+        if (term && term.cwd) {
+            store.set('git.cwd', term.cwd);
+        }
+    });
+
     if (window.performance.navigation.type === 1) {
         window.term[window.currentTerm].resendCWD();
     }
@@ -558,7 +610,7 @@ function destroyAll() {
         });
     }
     if (window.fsDisp && typeof window.fsDisp.destroy === 'function') window.fsDisp.destroy();
-    if (window.keyboard && typeof window.keyboard.destroy === 'function') window.keyboard.destroy();
+    if (window.bottomPanel && typeof window.bottomPanel.destroy === 'function') window.bottomPanel.destroy();
     if (window.audioManager && typeof window.audioManager.destroy === 'function') window.audioManager.destroy();
     scheduler.destroy();
     Modal.destroyAll();
@@ -573,16 +625,7 @@ window.themeChanger = theme => {
     }, 100);
 };
 
-window.remakeKeyboard = async (layout) => {
-    document.getElementById("keyboard").innerHTML = "";
-    const kbLayout = await window.edex.config.readKeyboardLayout(layout);
-    window.keyboard = new Keyboard({
-        layout: kbLayout,
-        container: "keyboard",
-        store
-    });
-    window.edex.hotswitch.setKbOverride(layout);
-};
+// Keyboard layout switching removed (on-screen keyboard removed)
 
 window.focusShellTab = number => {
     window.audioManager.folder.play();
@@ -640,12 +683,7 @@ window.focusShellTab = number => {
 window.openSettings = async () => {
     if (document.getElementById("settingsEditor")) return;
 
-    let keyboards = "", themes = "", monitors = "", ifaces = "";
-    const kbList = await window.edex.config.listKeyboards();
-    kbList.forEach(kb => {
-        if (kb === window.settings.keyboard) return;
-        keyboards += `<option>${kb}</option>`;
-    });
+    let themes = "", monitors = "", ifaces = "";
     const thList = await window.edex.config.listThemes();
     thList.forEach(th => {
         if (th === window.settings.theme) return;
@@ -673,7 +711,6 @@ window.openSettings = async () => {
                     <tr><td>cwd</td><td>Working Directory to start in</td><td><input type="text" id="settingsEditor-cwd" value="${window.settings.cwd}"></td></tr>
                     <tr><td>env</td><td>Custom shell environment override</td><td><input type="text" id="settingsEditor-env" value="${window.settings.env}"></td></tr>
                     <tr><td>username</td><td>Custom username to display at boot</td><td><input type="text" id="settingsEditor-username" value="${window.settings.username}"></td></tr>
-                    <tr><td>keyboard</td><td>On-screen keyboard layout code</td><td><select id="settingsEditor-keyboard"><option>${window.settings.keyboard}</option>${keyboards}</select></td></tr>
                     <tr><td>theme</td><td>Name of the theme to load</td><td><select id="settingsEditor-theme"><option>${window.settings.theme}</option>${themes}</select></td></tr>
                     <tr><td>termFontSize</td><td>Size of the terminal text in pixels</td><td><input type="number" id="settingsEditor-termFontSize" value="${window.settings.termFontSize}"></td></tr>
                     <tr><td>audio</td><td>Activate audio sound effects</td><td><select id="settingsEditor-audio"><option>${window.settings.audio}</option><option>${!window.settings.audio}</option></select></td></tr>
@@ -721,7 +758,6 @@ window.writeSettingsFile = () => {
         cwd: document.getElementById("settingsEditor-cwd").value,
         env: document.getElementById("settingsEditor-env").value,
         username: document.getElementById("settingsEditor-username").value,
-        keyboard: document.getElementById("settingsEditor-keyboard").value,
         theme: document.getElementById("settingsEditor-theme").value,
         termFontSize: Number(document.getElementById("settingsEditor-termFontSize").value),
         audio: (document.getElementById("settingsEditor-audio").value === "true"),
@@ -779,7 +815,7 @@ window.openShortcutsHelp = () => {
         "TERMINAL_SEARCH": "Search text in the active terminal scrollback.",
         "FS_LIST_VIEW": "Toggle list/grid view in file browser.",
         "FS_DOTFILES": "Toggle hidden files in file browser.",
-        "KB_PASSMODE": "Toggle on-screen keyboard password mode.",
+        "TOGGLE_BOTTOM_PANEL": "Toggle the bottom panel open/closed.",
         "DEV_DEBUG": "Open Chromium Dev Tools.",
         "DEV_RELOAD": "Trigger front-end hot reload."
     };
@@ -922,9 +958,9 @@ window.useAppShortcut = action => {
         case "SHORTCUTS": window.openShortcutsHelp(); return true;
         case "FUZZY_SEARCH": window.activeFuzzyFinder = new FuzzyFinder(); return true;
         case "TERMINAL_SEARCH": toggleTerminalSearch(); return true;
-        case "FS_LIST_VIEW": window.fsDisp.toggleListview(); return true;
-        case "FS_DOTFILES": window.fsDisp.toggleHidedotfiles(); return true;
-        case "KB_PASSMODE": window.keyboard.togglePasswordMode(); return true;
+        case "FS_LIST_VIEW": if (window.fsDisp) window.fsDisp.toggleListview(); return true;
+        case "FS_DOTFILES": if (window.fsDisp) window.fsDisp.toggleHidedotfiles(); return true;
+        case "TOGGLE_BOTTOM_PANEL": if (window.bottomPanel) window.bottomPanel.toggle(); return true;
         case "DEV_DEBUG": window.edex.window.toggleDevTools(); return true;
         case "DEV_RELOAD": destroyAll(); window.location.reload(true); return true;
         default:
