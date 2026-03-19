@@ -144,11 +144,25 @@ class Terminal {
         let fitAddon = new FitAddon();
         this.term.loadAddon(fitAddon);
         this.term.open(document.getElementById(opts.parentId));
-        this.term.loadAddon(new WebglAddon());
+        try {
+            this.term.loadAddon(new WebglAddon());
+        } catch (error) {
+            console.warn('WebGL terminal renderer disabled:', error);
+        }
 
         // Search addon
-        this._searchAddon = new SearchAddon();
-        this.term.loadAddon(this._searchAddon);
+        this._searchAddon = null;
+        if (typeof this.term.onWriteParsed === 'function') {
+            try {
+                this._searchAddon = new SearchAddon();
+                this.term.loadAddon(this._searchAddon);
+            } catch (error) {
+                this._searchAddon = null;
+                console.warn('Terminal search disabled:', error);
+            }
+        } else {
+            console.warn('Terminal search disabled: this xterm build does not expose onWriteParsed().');
+        }
 
         // Clickable URLs
         this.term.loadAddon(new WebLinksAddon((event, uri) => {
@@ -160,12 +174,8 @@ class Terminal {
         this.term.loadAddon(unicode11);
         this.term.unicode.activeVersion = '11';
 
-        // Ligatures addon uses Node.js fs/util at eval time — load dynamically
-        import('xterm-addon-ligatures').then(({ LigaturesAddon }) => {
-            this.term.loadAddon(new LigaturesAddon());
-        }).catch(() => {
-            // Expected in context-isolated renderer: font discovery requires Node.js
-        });
+        // The ligatures addon still evaluates Node-only modules during import.
+        // Skip it in the context-isolated renderer until the dependency stack is updated.
         const keydownHandler = opts.keydownHandler || (e => window.keyboard.keydownHandler(e));
         this.term.attachCustomKeyEventHandler(e => {
             keydownHandler(e);

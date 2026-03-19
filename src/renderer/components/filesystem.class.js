@@ -205,6 +205,9 @@ class FilesystemDisplay {
 
             this.reCalculateDiskUsage(tcwd);
 
+            // Notify git status panel of CWD change
+            if (this._store) this._store.set('git.cwd', tcwd);
+
             this.cwd = [];
 
             await new Promise((resolve, reject) => {
@@ -834,6 +837,8 @@ class FilesystemDisplay {
 
         // File types
         if (cat === "file") {
+            // Notify file preview (if callback registered)
+            if (cb.onFileSelect) cb.onFileSelect(entry.path);
             this.openFile(idx);
             return;
         }

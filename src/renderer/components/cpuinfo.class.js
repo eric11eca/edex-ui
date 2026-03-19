@@ -157,7 +157,8 @@ class Cpuinfo {
 
     _updateTemp(data) {
         try {
-            document.getElementById("mod_cpuinfo_temp").innerText = `${data.max}°C`;
+            const temp = Number.isFinite(data?.max) ? data.max : "--";
+            document.getElementById("mod_cpuinfo_temp").innerText = `${temp}°C`;
         } catch(e) {}
     }
 
