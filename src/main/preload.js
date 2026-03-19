@@ -153,6 +153,11 @@ contextBridge.exposeInMainWorld('edex', {
     setKbOverride: (name) => ipcRenderer.send('hotswitch:setKbOverride', name),
   },
 
+  // --- Git ---
+  git: {
+    status: (cwd) => ipcRenderer.invoke('git:status', cwd),
+  },
+
   // --- Clipboard ---
   clipboard: {
     readText: () => clipboard.readText(),

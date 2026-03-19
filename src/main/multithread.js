@@ -12,7 +12,25 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Also, leave a core available for the renderer process
 const osCPUs = cpus().length - 1;
 // See #904
-const numCPUs = (osCPUs > 7) ? 7 : osCPUs;
+const numCPUs = Math.max(1, (osCPUs > 7) ? 7 : osCPUs);
+
+const FALLBACKS = {
+  battery: { hasBattery: false, isCharging: false, acConnected: false, percent: 0 },
+  blockDevices: [],
+  chassis: { manufacturer: '', type: '' },
+  cpu: { manufacturer: '', brand: 'Unknown CPU', cores: 2, speed: 0, speedMax: 0 },
+  cpuTemperature: { main: null, cores: [], max: null },
+  currentLoad: { currentLoad: 0, currentLoadUser: 0, currentLoadSystem: 0, cpus: [{ load: 0 }, { load: 0 }] },
+  fsSize: [],
+  mem: { total: 1, free: 1, used: 0, active: 0, available: 1, swaptotal: 0, swapused: 0, swapfree: 0 },
+  networkConnections: [],
+  networkInterfaces: [{ iface: 'lo', operstate: 'down', internal: true, ip4: '', mac: '' }],
+  networkStats: [{ tx_sec: 0, rx_sec: 0, tx_bytes: 0, rx_bytes: 0 }],
+  processes: { all: 0, list: [] },
+  system: { manufacturer: '', model: '' },
+};
+
+const warnedFallbacks = new Set();
 
 // Worker file: in dev mode, __dirname is dist-electron/main/ but source is src/main/
 const isDev = !app.isPackaged;
@@ -29,6 +47,10 @@ let workers = [];
 cluster.on("fork", worker => {
   workers.push(worker.id);
 });
+cluster.on("exit", (worker, code, signal) => {
+  workers = workers.filter(id => id !== worker.id);
+  signale.warn(`Systeminformation worker ${worker.process?.pid || worker.id} exited (${code ?? 'null'}${signal ? `, ${signal}` : ''})`);
+});
 
 for (let i = 0; i < numCPUs; i++) {
   cluster.fork();
@@ -36,22 +58,84 @@ for (let i = 0; i < numCPUs; i++) {
 
 signale.success("Multithreaded controller ready");
 
-let lastID = 0;
+let lastID = -1;
 
-function dispatch(type, id, arg) {
-  let selectedID = lastID + 1;
-  if (selectedID > numCPUs - 1) selectedID = 0;
-
-  cluster.workers[workers[selectedID]].send(JSON.stringify({
-    id,
-    type,
-    arg,
-  }));
-
-  lastID = selectedID;
+function cloneFallback(value) {
+  if (Array.isArray(value)) {
+    return value.map(item => cloneFallback(item));
+  }
+  if (value && typeof value === 'object') {
+    return JSON.parse(JSON.stringify(value));
+  }
+  return value;
 }
 
-let queue = {};
+function getFallback(type, error) {
+  const fallback = FALLBACKS[type];
+  if (typeof fallback === 'undefined') {
+    return undefined;
+  }
+
+  const warnKey = `${type}:${error?.code || error?.name || 'unknown'}`;
+  if (!warnedFallbacks.has(warnKey)) {
+    warnedFallbacks.add(warnKey);
+    signale.warn(`systeminformation.${type} failed, using fallback data: ${error?.message || error}`);
+  }
+
+  return cloneFallback(fallback);
+}
+
+async function invokeSystemInformation(type, args = []) {
+  try {
+    return await si[type](...args);
+  } catch (error) {
+    const fallback = getFallback(type, error);
+    if (typeof fallback !== 'undefined') {
+      return fallback;
+    }
+    throw error;
+  }
+}
+
+function replyToSender(sender, id, payload) {
+  if (!sender || sender.isDestroyed()) {
+    return;
+  }
+  sender.send(`systeminformation-reply-${id}`, payload);
+}
+
+function dispatch(type, id, args) {
+  const liveWorkers = workers.filter(workerId => Boolean(cluster.workers[workerId]));
+  workers = liveWorkers;
+  if (liveWorkers.length === 0) {
+    return false;
+  }
+
+  lastID = (lastID + 1) % liveWorkers.length;
+  const worker = cluster.workers[liveWorkers[lastID]];
+  if (!worker) {
+    return false;
+  }
+
+  worker.send(JSON.stringify({
+    id,
+    type,
+    args,
+  }));
+  return true;
+}
+
+async function handleDirectInvocation(sender, type, id, args) {
+  try {
+    const res = await invokeSystemInformation(type, args);
+    replyToSender(sender, id, res);
+  } catch (error) {
+    signale.error(`systeminformation.${type} failed without fallback`, error);
+    replyToSender(sender, id, null);
+  }
+}
+
+const queue = new Map();
 ipcMain.on("systeminformation-call", (e, type, id, ...args) => {
   if (!si[type]) {
     signale.warn("Illegal request for systeminformation");
@@ -59,24 +143,37 @@ ipcMain.on("systeminformation-call", (e, type, id, ...args) => {
   }
 
   if (args.length > 1 || workers.length <= 0) {
-    si[type](...args).then(res => {
-      if (e.sender) {
-        e.sender.send("systeminformation-reply-" + id, res);
-      }
-    });
+    handleDirectInvocation(e.sender, type, id, args);
   } else {
-    queue[id] = e.sender;
-    dispatch(type, id, args[0]);
+    queue.set(id, e.sender);
+    if (!dispatch(type, id, args)) {
+      queue.delete(id);
+      handleDirectInvocation(e.sender, type, id, args);
+    }
   }
 });
 
 cluster.on("message", (worker, msg) => {
   msg = JSON.parse(msg);
-  try {
-    if (!queue[msg.id].isDestroyed()) {
-      queue[msg.id].send("systeminformation-reply-" + msg.id, msg.res);
-      delete queue[msg.id];
+  const sender = queue.get(msg.id);
+  queue.delete(msg.id);
+  if (!sender || sender.isDestroyed()) {
+    return;
+  }
+
+  if (msg.error) {
+    const fallback = getFallback(msg.type, msg.error);
+    if (typeof fallback !== 'undefined') {
+      replyToSender(sender, msg.id, fallback);
+      return;
     }
+    signale.error(`systeminformation.${msg.type} worker failed`, msg.error);
+    replyToSender(sender, msg.id, null);
+    return;
+  }
+
+  try {
+    replyToSender(sender, msg.id, msg.res);
   } catch (e) {
     // Window has been closed, ignore.
   }

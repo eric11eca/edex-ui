@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
 import net from 'node:net';
+import { execSync } from 'node:child_process';
 import { migrateSettings } from './settings-migration.js';
 
 // Will be set by init()
@@ -54,6 +55,7 @@ export function init(options) {
   registerNetHandlers();
   registerGeoipHandlers();
   registerShortcutHandlers();
+  registerGitHandlers();
   // Forward window events to renderer
   win.on('resize', () => {
     if (win && !win.isDestroyed()) {
@@ -373,6 +375,23 @@ function registerGeoipHandlers() {
       return null;
     } catch {
       return null;
+    }
+  });
+}
+
+// --- Git handlers ---
+function registerGitHandlers() {
+  ipcMain.handle('git:status', (e, cwd) => {
+    try {
+      // Verify it's a git repo
+      execSync('git rev-parse --is-inside-work-tree', { cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+      const status = execSync('git status --porcelain', { cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+      const log = execSync('git log --oneline -10', { cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+      return { branch, status, log };
+    } catch {
+      return null; // Not a git repo or git not available
     }
   });
 }
