@@ -13,7 +13,6 @@ body {
     flex-direction: row;
     align-items: center;
     justify-content: center;
-    flex-wrap: wrap;
     background: linear-gradient(90deg, var(--color_light_black) 1.85vh, transparent 1%) center, linear-gradient(var(--color_light_black) 1.85vh, transparent 1%) center, var(--color_grey);
     background-size: 2.04vh 2.04vh;
 }

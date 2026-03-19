@@ -1,9 +1,8 @@
 section#main_shell {
-    width: 65%;
-    height: 60.3%;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
     padding: 0.74vh;
-    /* border: 0.18vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.5); */
-    /* border-radius: 0.278vh; */
 
     --aug-border: 0.18vh;
     --aug-border-bg: rgb(var(--color_r), var(--color_g), var(--color_b));
@@ -15,7 +14,7 @@ section#main_shell {
     justify-content: flex-start;
     overflow: hidden;
 
-    transition: width .5s cubic-bezier(0.85, 0.5, 0.85, 0.5), height .5s cubic-bezier(0.85, 0.5, 0.85, 0.5);
+    transition: flex .3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 h1#main_shell_greeting {
@@ -33,8 +32,8 @@ h1#main_shell_greeting > em {
 
 section#main_shell > h3.title {
     top: 0.74vh;
-    left: 16.5vw;
-    width: 66%;
+    left: 17.5vw;
+    width: 64%;
     transition: opacity .5s cubic-bezier(0.4, 0, 1, 1) .5s;
 }
 

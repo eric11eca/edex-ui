@@ -1,0 +1,507 @@
+/* Center Column Layout */
+#center_column {
+    width: 65%;
+    height: 96%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+/* Bottom Panel */
+section#bottom_panel {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+section#bottom_panel.collapsed #bottom_panel_content {
+    height: 0;
+    opacity: 0;
+}
+
+section#bottom_panel.expanded #bottom_panel_content {
+    height: 32vh;
+    opacity: 1;
+}
+
+/* Header bar - always visible */
+#bottom_panel_header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 2.8vh;
+    min-height: 2.8vh;
+    border-top: 0.18vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.03);
+    padding: 0 1vh;
+    cursor: default;
+}
+
+#bottom_panel_tabs {
+    display: flex;
+    flex: 1;
+    gap: 0.3vh;
+    align-items: center;
+    height: 100%;
+}
+
+.bottom-tab {
+    padding: 0.3vh 1.5vh;
+    cursor: pointer;
+    font-family: var(--font_main);
+    font-size: 1.2vh;
+    text-transform: uppercase;
+    letter-spacing: 0.1vh;
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);
+    border-bottom: 0.18vh solid transparent;
+    transition: color 0.2s ease, border-color 0.2s ease;
+    white-space: nowrap;
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.bottom-tab:hover {
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.8);
+}
+
+.bottom-tab.active {
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    border-bottom-color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    font-weight: bold;
+}
+
+#bottom_panel_toggle {
+    width: 2.8vh;
+    height: 2.8vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.2vh;
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);
+    transition: color 0.2s ease, transform 0.3s ease;
+}
+
+#bottom_panel_toggle:hover {
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+}
+
+section#bottom_panel.expanded #bottom_panel_toggle {
+    transform: rotate(180deg);
+}
+
+/* Content area */
+#bottom_panel_content {
+    overflow: hidden;
+    display: flex;
+    transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+}
+
+.bottom-view {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    height: 100%;
+    gap: 0.5vh;
+}
+
+.view-pane {
+    flex: 1;
+    overflow: hidden;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    border: 0.09vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.15);
+}
+
+/* ============================================
+   Filesystem overrides when inside bottom panel
+   ============================================ */
+.view-pane section#filesystem {
+    width: 100% !important;
+    height: 100% !important;
+    top: 0;
+    margin: 0;
+    opacity: 1 !important;
+}
+
+.view-pane section#filesystem > h3.title {
+    width: 100%;
+    position: relative;
+    top: 0;
+    left: 0;
+}
+
+.view-pane div#fs_disp_container {
+    height: calc(100% - 6vh);
+    width: 100%;
+    left: 0;
+    top: 1vh;
+}
+
+.view-pane div#fs_space_bar {
+    top: 0.5vh;
+    left: 0;
+}
+
+/* ============================================
+   File Preview
+   ============================================ */
+.file-preview-header {
+    display: flex;
+    align-items: center;
+    gap: 1vh;
+    padding: 0.3vh 1vh;
+    height: 2.5vh;
+    min-height: 2.5vh;
+    border-bottom: 0.09vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.2);
+    font-family: var(--font_main);
+}
+
+.file-preview-title {
+    font-size: 1.1vh;
+    text-transform: uppercase;
+    letter-spacing: 0.1vh;
+    opacity: 0.6;
+    white-space: nowrap;
+}
+
+.file-preview-path {
+    font-size: 1.1vh;
+    font-family: var(--font_mono, monospace);
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-preview-content {
+    flex: 1;
+    overflow: auto;
+    font-family: var(--font_mono, monospace);
+    font-size: 1.2vh;
+    line-height: 1.6;
+    padding: 0.5vh;
+}
+
+.file-preview-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    font-family: var(--font_main);
+    font-size: 1.3vh;
+    opacity: 0.4;
+    text-transform: uppercase;
+    letter-spacing: 0.1vh;
+}
+
+.file-preview-table {
+    border-collapse: collapse;
+    width: 100%;
+    table-layout: fixed;
+}
+
+.file-preview-table td {
+    padding: 0;
+    vertical-align: top;
+    white-space: pre;
+}
+
+.file-preview-table .line-num {
+    width: 4vh;
+    min-width: 4vh;
+    text-align: right;
+    padding-right: 1vh;
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
+    user-select: none;
+    border-right: 0.09vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.1);
+}
+
+.file-preview-table .line-content {
+    padding-left: 1vh;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Syntax highlighting */
+.hl-keyword {
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    font-weight: bold;
+}
+
+.hl-string {
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.7);
+}
+
+.hl-comment {
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.35);
+    font-style: italic;
+}
+
+.hl-number {
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.85);
+}
+
+/* ============================================
+   Git Status
+   ============================================ */
+.git-status-header {
+    display: flex;
+    align-items: center;
+    gap: 1vh;
+    padding: 0.3vh 1vh;
+    height: 2.5vh;
+    min-height: 2.5vh;
+    border-bottom: 0.09vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.2);
+    font-family: var(--font_main);
+}
+
+.git-status-title {
+    font-size: 1.1vh;
+    text-transform: uppercase;
+    letter-spacing: 0.1vh;
+    opacity: 0.6;
+    white-space: nowrap;
+}
+
+.git-branch {
+    font-size: 1.2vh;
+    font-family: var(--font_mono, monospace);
+    font-weight: bold;
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+}
+
+.git-status-content {
+    flex: 1;
+    overflow: auto;
+    padding: 0.5vh 1vh;
+    font-family: var(--font_mono, monospace);
+    font-size: 1.1vh;
+}
+
+.git-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    font-family: var(--font_main);
+    font-size: 1.3vh;
+    opacity: 0.4;
+    text-transform: uppercase;
+    letter-spacing: 0.1vh;
+}
+
+.git-section {
+    margin-bottom: 1vh;
+}
+
+.git-section-title {
+    font-family: var(--font_main);
+    font-size: 1vh;
+    text-transform: uppercase;
+    letter-spacing: 0.15vh;
+    margin: 0 0 0.3vh 0;
+    padding-bottom: 0.2vh;
+    border-bottom: 0.09vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.15);
+    font-weight: bold;
+}
+
+.git-section-title.staged {
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.9);
+}
+
+.git-section-title.modified {
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.7);
+}
+
+.git-section-title.untracked {
+    opacity: 0.5;
+}
+
+.git-section-title.log {
+    opacity: 0.6;
+}
+
+.git-file-list, .git-log-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15vh;
+}
+
+.git-file {
+    display: flex;
+    gap: 1vh;
+    align-items: center;
+    padding: 0.1vh 0.3vh;
+}
+
+.git-file-status {
+    width: 1.5vh;
+    text-align: center;
+    font-weight: bold;
+}
+
+.git-file.staged .git-file-status {
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+}
+
+.git-file.modified .git-file-status {
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.7);
+}
+
+.git-file.untracked .git-file-status {
+    opacity: 0.5;
+}
+
+.git-file-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.git-clean {
+    opacity: 0.5;
+    padding: 0.5vh;
+    text-align: center;
+    font-family: var(--font_main);
+}
+
+.git-log-entry {
+    display: flex;
+    gap: 1vh;
+    align-items: baseline;
+    padding: 0.1vh 0.3vh;
+}
+
+.git-hash {
+    font-weight: bold;
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.7);
+    white-space: nowrap;
+    font-size: 1vh;
+}
+
+.git-msg {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.8;
+}
+
+/* ============================================
+   Process Manager
+   ============================================ */
+.proc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.3vh 1vh;
+    height: 2.5vh;
+    min-height: 2.5vh;
+    border-bottom: 0.09vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.2);
+    font-family: var(--font_main);
+}
+
+.proc-title {
+    font-size: 1.1vh;
+    text-transform: uppercase;
+    letter-spacing: 0.1vh;
+    opacity: 0.6;
+}
+
+.proc-sort-controls {
+    display: flex;
+    gap: 0.8vh;
+}
+
+.proc-sort-btn {
+    font-size: 1vh;
+    cursor: pointer;
+    padding: 0.2vh 0.6vh;
+    border: 0.09vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);
+    transition: color 0.2s, border-color 0.2s, background-color 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.05vh;
+}
+
+.proc-sort-btn:hover {
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.8);
+    border-color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);
+}
+
+.proc-sort-btn.active {
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    border-color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.1);
+    font-weight: bold;
+}
+
+.proc-table {
+    flex: 1;
+    overflow: auto;
+    font-family: var(--font_mono, monospace);
+    font-size: 1vh;
+}
+
+.proc-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    font-family: var(--font_main);
+    font-size: 1.3vh;
+    opacity: 0.4;
+    text-transform: uppercase;
+}
+
+.proc-list {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.proc-list th,
+.proc-list td {
+    padding: 0.2vh 0.5vh;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.proc-list thead {
+    position: sticky;
+    top: 0;
+    background: var(--color_light_black);
+}
+
+.proc-list th {
+    font-family: var(--font_main);
+    font-size: 0.9vh;
+    text-transform: uppercase;
+    letter-spacing: 0.1vh;
+    border-bottom: 0.09vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.3);
+    opacity: 0.6;
+    font-weight: bold;
+}
+
+.proc-list td {
+    border-bottom: 0.09vh solid rgba(var(--color_r), var(--color_g), var(--color_b), 0.05);
+}
+
+.proc-col-pid { width: 6vh; }
+.proc-col-name { width: auto; max-width: 20vh; }
+.proc-col-cpu { width: 5vh; text-align: right; }
+.proc-col-mem { width: 5vh; text-align: right; }
+.proc-col-user { width: 8vh; }
+
+.proc-high {
+    color: rgb(var(--color_r), var(--color_g), var(--color_b));
+    font-weight: bold;
+}
+
+.proc-medium {
+    color: rgba(var(--color_r), var(--color_g), var(--color_b), 0.8);
+}
